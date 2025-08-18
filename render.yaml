@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: georges-photo-gallery
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python src/main.py
+    plan: free
+    envVars:
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: ADMIN_PASSWORD
+        value: Hanshow99@
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FLASK_ENV
+        value: production
+
