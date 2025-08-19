@@ -1,7 +1,26 @@
 from flask import Blueprint, request, jsonify
+import re
 from src.models.photo import db, Collection, Photo
 
 collections_bp = Blueprint('collections', __name__)
+
+def validate_collection_name(name):
+    """Validate collection name"""
+    if not name or not isinstance(name, str):
+        return False, "Collection name is required"
+    
+    name = name.strip()
+    if len(name) < 1:
+        return False, "Collection name cannot be empty"
+    
+    if len(name) > 100:
+        return False, "Collection name is too long (max 100 characters)"
+    
+    # Allow letters, numbers, spaces, hyphens, underscores, and common punctuation
+    if not re.match(r'^[a-zA-Z0-9\s\-_.,!?()&]+$', name):
+        return False, "Collection name contains invalid characters"
+    
+    return True, name
 
 @collections_bp.route('/collections', methods=['GET'])
 def get_collections():
@@ -13,9 +32,10 @@ def get_collections():
             'collections': [collection.to_dict() for collection in collections]
         })
     except Exception as e:
+        print(f"Error getting collections: {str(e)}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to fetch collections'
         }), 500
 
 @collections_bp.route('/collections', methods=['POST'])
@@ -23,13 +43,23 @@ def create_collection():
     """Create a new collection"""
     try:
         data = request.get_json()
-        name = data.get('name', '').strip()
-        
-        if not name:
+        if not data:
             return jsonify({
                 'success': False,
-                'error': 'Collection name is required'
+                'error': 'No data provided'
             }), 400
+            
+        name = data.get('name', '')
+        
+        # Validate collection name
+        is_valid, result = validate_collection_name(name)
+        if not is_valid:
+            return jsonify({
+                'success': False,
+                'error': result
+            }), 400
+        
+        name = result  # Use the cleaned name
         
         # Check if collection with this name already exists
         existing_collection = Collection.query.filter_by(name=name).first()
@@ -52,9 +82,10 @@ def create_collection():
         
     except Exception as e:
         db.session.rollback()
+        print(f"Error creating collection: {str(e)}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to create collection'
         }), 500
 
 @collections_bp.route('/collections/<int:collection_id>', methods=['DELETE'])

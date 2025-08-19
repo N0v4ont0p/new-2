@@ -18,6 +18,11 @@ cloudinary.config(
 
 photos_bp = Blueprint('photos', __name__)
 
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff'}
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 @photos_bp.route('/photos', methods=['GET'])
 def get_photos():
     """Get all photos with optional collection filtering"""
@@ -25,7 +30,14 @@ def get_photos():
         collection_id = request.args.get('collection_id')
         
         if collection_id:
-            photos = Photo.query.filter_by(collection_id=collection_id).order_by(Photo.uploaded_at.desc()).all()
+            try:
+                collection_id = int(collection_id)
+                photos = Photo.query.filter_by(collection_id=collection_id).order_by(Photo.uploaded_at.desc()).all()
+            except ValueError:
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid collection ID'
+                }), 400
         else:
             photos = Photo.query.order_by(Photo.uploaded_at.desc()).all()
         
@@ -34,9 +46,10 @@ def get_photos():
             'photos': [photo.to_dict() for photo in photos]
         })
     except Exception as e:
+        print(f"Error getting photos: {str(e)}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to fetch photos'
         }), 500
 
 @photos_bp.route('/photos', methods=['POST'])
@@ -64,18 +77,31 @@ def upload_photos():
         
         # Validate collection if provided
         collection = None
-        if collection_id and collection_id != '':
-            collection = Collection.query.get(collection_id)
-            if not collection:
+        if collection_id and collection_id != '' and collection_id != 'null':
+            try:
+                collection_id = int(collection_id)
+                collection = Collection.query.get(collection_id)
+                if not collection:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Collection not found'
+                    }), 404
+            except ValueError:
                 return jsonify({
                     'success': False,
-                    'error': 'Collection not found'
-                }), 404
+                    'error': 'Invalid collection ID'
+                }), 400
+        else:
+            collection_id = None
         
         uploaded_photos = []
         
         for i, file in enumerate(files):
             if file and file.filename:
+                # Validate file type
+                if not allowed_file(file.filename):
+                    continue  # Skip invalid files
+                
                 try:
                     # Get metadata for this photo
                     title = titles[i] if i < len(titles) and titles[i] else secure_filename(file.filename)
@@ -90,48 +116,49 @@ def upload_photos():
                         fetch_format="auto"
                     )
                     
-                    # Create photo record in database
+                    # Save to database
                     photo = Photo(
                         title=title,
                         description=description,
+                        filename=secure_filename(file.filename),
                         cloudinary_public_id=upload_result['public_id'],
-                        cloudinary_url=upload_result['url'],
-                        cloudinary_secure_url=upload_result['secure_url'],
-                        original_filename=file.filename,
-                        file_format=upload_result.get('format'),
-                        file_size=upload_result.get('bytes'),
-                        width=upload_result.get('width'),
-                        height=upload_result.get('height'),
-                        collection_id=collection.id if collection else None
+                        cloudinary_url=upload_result['secure_url'],
+                        collection_id=collection_id
                     )
                     
                     db.session.add(photo)
                     uploaded_photos.append(photo)
                     
-                except Exception as e:
-                    current_app.logger.error(f"Error uploading file {file.filename}: {str(e)}")
-                    continue
+                except Exception as upload_error:
+                    print(f"Error uploading file {file.filename}: {str(upload_error)}")
+                    continue  # Skip this file and continue with others
         
-        # Commit all photos to database
+        if not uploaded_photos:
+            return jsonify({
+                'success': False,
+                'error': 'No valid files were uploaded'
+            }), 400
+        
+        # Commit all successful uploads
         db.session.commit()
         
         return jsonify({
             'success': True,
             'message': f'Successfully uploaded {len(uploaded_photos)} photos',
             'photos': [photo.to_dict() for photo in uploaded_photos]
-        })
+        }), 201
         
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error in upload_photos: {str(e)}")
+        print(f"Error uploading photos: {str(e)}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to upload photos'
         }), 500
 
 @photos_bp.route('/photos/<int:photo_id>', methods=['DELETE'])
 def delete_photo(photo_id):
-    """Delete a photo from both Cloudinary and database"""
+    """Delete a photo from Cloudinary and database"""
     try:
         photo = Photo.query.get(photo_id)
         if not photo:
@@ -143,8 +170,9 @@ def delete_photo(photo_id):
         # Delete from Cloudinary
         try:
             cloudinary.uploader.destroy(photo.cloudinary_public_id)
-        except Exception as e:
-            current_app.logger.warning(f"Failed to delete from Cloudinary: {str(e)}")
+        except Exception as cloudinary_error:
+            print(f"Error deleting from Cloudinary: {str(cloudinary_error)}")
+            # Continue with database deletion even if Cloudinary fails
         
         # Delete from database
         db.session.delete(photo)
@@ -157,14 +185,15 @@ def delete_photo(photo_id):
         
     except Exception as e:
         db.session.rollback()
+        print(f"Error deleting photo: {str(e)}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to delete photo'
         }), 500
 
-@photos_bp.route('/photos/<int:photo_id>/collection', methods=['PUT'])
-def update_photo_collection(photo_id):
-    """Update the collection assignment for a photo"""
+@photos_bp.route('/photos/<int:photo_id>', methods=['PUT'])
+def update_photo(photo_id):
+    """Update photo metadata"""
     try:
         photo = Photo.query.get(photo_id)
         if not photo:
@@ -174,117 +203,112 @@ def update_photo_collection(photo_id):
             }), 404
         
         data = request.get_json()
-        collection_id = data.get('collection_id')
         
-        # Validate collection if provided
-        if collection_id and collection_id != '':
-            collection = Collection.query.get(collection_id)
-            if not collection:
-                return jsonify({
-                    'success': False,
-                    'error': 'Collection not found'
-                }), 404
-            photo.collection_id = collection_id
-        else:
-            photo.collection_id = None
+        # Update fields if provided
+        if 'title' in data:
+            photo.title = data['title']
+        if 'description' in data:
+            photo.description = data['description']
+        if 'collection_id' in data:
+            collection_id = data['collection_id']
+            if collection_id:
+                collection = Collection.query.get(collection_id)
+                if not collection:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Collection not found'
+                    }), 404
+                photo.collection_id = collection_id
+            else:
+                photo.collection_id = None
         
         db.session.commit()
         
         return jsonify({
             'success': True,
-            'message': 'Photo collection updated successfully',
+            'message': 'Photo updated successfully',
             'photo': photo.to_dict()
         })
         
     except Exception as e:
         db.session.rollback()
+        print(f"Error updating photo: {str(e)}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to update photo'
         }), 500
 
-@photos_bp.route('/photos/bulk-update', methods=['PUT'])
+@photos_bp.route('/photos/bulk-update', methods=['POST'])
 def bulk_update_photos():
-    """Bulk update collection assignment for multiple photos"""
+    """Bulk update photos (assign to collection or delete)"""
     try:
         data = request.get_json()
         photo_ids = data.get('photo_ids', [])
-        collection_id = data.get('collection_id')
+        action = data.get('action')
         
         if not photo_ids:
             return jsonify({
                 'success': False,
-                'error': 'No photo IDs provided'
+                'error': 'No photos selected'
             }), 400
         
-        # Validate collection if provided
-        collection = None
-        if collection_id and collection_id != '':
-            collection = Collection.query.get(collection_id)
-            if not collection:
-                return jsonify({
-                    'success': False,
-                    'error': 'Collection not found'
-                }), 404
-        
-        # Update photos
         photos = Photo.query.filter(Photo.id.in_(photo_ids)).all()
-        for photo in photos:
-            photo.collection_id = collection.id if collection else None
-        
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': f'Successfully updated {len(photos)} photos',
-            'updated_count': len(photos)
-        })
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@photos_bp.route('/photos/bulk-delete', methods=['DELETE'])
-def bulk_delete_photos():
-    """Bulk delete multiple photos"""
-    try:
-        data = request.get_json()
-        photo_ids = data.get('photo_ids', [])
-        
-        if not photo_ids:
+        if not photos:
             return jsonify({
                 'success': False,
-                'error': 'No photo IDs provided'
+                'error': 'No valid photos found'
+            }), 404
+        
+        if action == 'assign_collection':
+            collection_id = data.get('collection_id')
+            if collection_id:
+                collection = Collection.query.get(collection_id)
+                if not collection:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Collection not found'
+                    }), 404
+            
+            for photo in photos:
+                photo.collection_id = collection_id
+            
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Successfully updated {len(photos)} photos'
+            })
+        
+        elif action == 'delete':
+            # Delete from Cloudinary and database
+            deleted_count = 0
+            for photo in photos:
+                try:
+                    cloudinary.uploader.destroy(photo.cloudinary_public_id)
+                except Exception as cloudinary_error:
+                    print(f"Error deleting from Cloudinary: {str(cloudinary_error)}")
+                
+                db.session.delete(photo)
+                deleted_count += 1
+            
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Successfully deleted {deleted_count} photos'
+            })
+        
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid action'
             }), 400
-        
-        photos = Photo.query.filter(Photo.id.in_(photo_ids)).all()
-        
-        # Delete from Cloudinary
-        for photo in photos:
-            try:
-                cloudinary.uploader.destroy(photo.cloudinary_public_id)
-            except Exception as e:
-                current_app.logger.warning(f"Failed to delete {photo.cloudinary_public_id} from Cloudinary: {str(e)}")
-        
-        # Delete from database
-        for photo in photos:
-            db.session.delete(photo)
-        
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': f'Successfully deleted {len(photos)} photos',
-            'deleted_count': len(photos)
-        })
         
     except Exception as e:
         db.session.rollback()
+        print(f"Error in bulk update: {str(e)}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to update photos'
         }), 500
 

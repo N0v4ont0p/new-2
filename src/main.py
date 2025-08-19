@@ -3,7 +3,7 @@ import sys
 # DON'T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from src.models.photo import db
@@ -18,7 +18,7 @@ app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'sta
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'asdf#FGSgvasgf$5$WGT')
 
 # Enable CORS for all routes
-CORS(app)
+CORS(app, supports_credentials=True)
 
 # Register blueprints
 app.register_blueprint(photos_bp, url_prefix='/api')
@@ -33,6 +33,15 @@ db.init_app(app)
 # Create database tables
 with app.app_context():
     db.create_all()
+
+# Error handlers
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'success': False, 'error': 'Not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'success': False, 'error': 'Internal server error'}), 500
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -52,4 +61,5 @@ def serve(path):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=os.getenv('FLASK_ENV') != 'production')
