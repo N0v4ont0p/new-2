@@ -1,18 +1,20 @@
 import os
 import sys
-# DON'T CHANGE THIS !!!
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
 from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
+
+# Load environment variables first
+load_dotenv()
+
+# Add the project root to Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
 from src.models.photo import db
 from src.routes.photos import photos_bp
 from src.routes.collections import collections_bp
 from src.routes.auth import auth_bp
-
-# Load environment variables
-load_dotenv()
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'asdf#FGSgvasgf$5$WGT')
@@ -25,14 +27,23 @@ app.register_blueprint(photos_bp, url_prefix='/api')
 app.register_blueprint(collections_bp, url_prefix='/api')
 app.register_blueprint(auth_bp, url_prefix='/api')
 
-# Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
+# Database configuration - use /tmp for writable directory on Render
+database_dir = os.getenv('DATABASE_DIR', '/tmp')
+os.makedirs(database_dir, exist_ok=True)
+database_path = os.path.join(database_dir, 'app.db')
+
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{database_path}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
 # Create database tables
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+        print(f"Database created successfully at: {database_path}")
+    except Exception as e:
+        print(f"Error creating database: {str(e)}")
+        raise
 
 # Error handlers
 @app.errorhandler(404)
@@ -48,18 +59,14 @@ def internal_error(error):
 def serve(path):
     static_folder_path = app.static_folder
     if static_folder_path is None:
-            return "Static folder not configured", 404
-
+        return jsonify({'success': False, 'error': 'Static folder not configured'}), 500
+    
     if path != "" and os.path.exists(os.path.join(static_folder_path, path)):
         return send_from_directory(static_folder_path, path)
     else:
-        index_path = os.path.join(static_folder_path, 'index.html')
-        if os.path.exists(index_path):
-            return send_from_directory(static_folder_path, 'index.html')
-        else:
-            return "index.html not found", 404
-
+        return send_from_directory(static_folder_path, 'index.html')
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=os.getenv('FLASK_ENV') != 'production')
+    port = int(os.getenv('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
+
