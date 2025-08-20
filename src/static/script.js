@@ -1,102 +1,133 @@
-// Photo Gallery JavaScript
+// Photo Gallery Application - Apple-style JavaScript
 class PhotoGallery {
     constructor() {
         this.currentView = 'gallery';
-        this.currentCollection = null;
-        this.selectedPhotos = new Set();
         this.isLoggedIn = false;
+        this.collections = [];
+        this.photos = [];
+        this.selectedCollection = null;
         
         this.init();
     }
     
     init() {
-        this.bindEvents();
+        this.setupEventListeners();
         this.checkAuthStatus();
         this.loadCollections();
         this.loadPhotos();
+        this.showGalleryView();
     }
     
-    bindEvents() {
-        // Navigation
-        document.getElementById('adminBtn').addEventListener('click', () => this.showView('admin'));
-        document.getElementById('homeBtn').addEventListener('click', () => this.showView('gallery'));
-        document.getElementById('backToGallery').addEventListener('click', () => this.showAllPhotos());
+    setupEventListeners() {
+        // Navigation buttons
+        document.getElementById('galleryBtn').addEventListener('click', () => this.showGalleryView());
+        document.getElementById('adminBtn').addEventListener('click', () => this.showAdminView());
         
         // Admin login
-        document.getElementById('loginForm').addEventListener('submit', (e) => this.handleLogin(e));
-        
-        // Upload functionality
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-        
-        uploadArea.addEventListener('click', () => fileInput.click());
-        uploadArea.addEventListener('dragover', (e) => this.handleDragOver(e));
-        uploadArea.addEventListener('drop', (e) => this.handleDrop(e));
-        fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-        
-        document.getElementById('uploadBtn').addEventListener('click', () => this.uploadPhotos());
+        document.getElementById('loginBtn').addEventListener('click', () => this.handleLogin());
+        document.getElementById('logoutBtn').addEventListener('click', () => this.handleLogout());
         
         // Collection management
-        document.getElementById('addCollectionBtn').addEventListener('click', () => this.addCollection());
-        document.getElementById('newCollectionName').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.addCollection();
-        });
+        document.getElementById('addCollectionBtn').addEventListener('click', () => this.createCollection());
         
-        // Bulk operations
-        document.getElementById('selectAllPhotos').addEventListener('change', (e) => this.toggleSelectAll(e));
-        document.getElementById('bulkAssignBtn').addEventListener('click', () => this.bulkAssignCollection());
-        document.getElementById('bulkDeleteBtn').addEventListener('click', () => this.bulkDeletePhotos());
+        // Photo upload
+        document.getElementById('uploadBtn').addEventListener('click', () => this.uploadPhotos());
         
-        // Modal
-        document.getElementById('closeModal').addEventListener('click', () => this.closeModal());
-        document.getElementById('photoModal').addEventListener('click', (e) => {
-            if (e.target.id === 'photoModal' || e.target.classList.contains('modal-backdrop')) {
+        // File input
+        document.getElementById('fileInput').addEventListener('change', (e) => this.handleFileSelect(e));
+        
+        // Drag and drop
+        const uploadArea = document.getElementById('uploadArea');
+        uploadArea.addEventListener('dragover', (e) => this.handleDragOver(e));
+        uploadArea.addEventListener('dragleave', (e) => this.handleDragLeave(e));
+        uploadArea.addEventListener('drop', (e) => this.handleDrop(e));
+        uploadArea.addEventListener('click', () => document.getElementById('fileInput').click());
+        
+        // Modal close
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
                 this.closeModal();
             }
         });
-        document.getElementById('downloadBtn').addEventListener('click', () => this.downloadPhoto());
         
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') this.closeModal();
+            if (e.key === 'Escape') {
+                this.closeModal();
+            }
         });
     }
     
+    // View Management
+    showGalleryView() {
+        this.currentView = 'gallery';
+        this.updateNavigation();
+        
+        document.getElementById('gallerySection').classList.remove('hidden');
+        document.getElementById('adminSection').classList.add('hidden');
+        
+        this.loadPhotos();
+        this.loadCollections();
+    }
+    
+    showAdminView() {
+        if (!this.isLoggedIn) {
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.getElementById('adminPanel').classList.add('hidden');
+        } else {
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('adminPanel').classList.remove('hidden');
+        }
+        
+        this.currentView = 'admin';
+        this.updateNavigation();
+        
+        document.getElementById('gallerySection').classList.add('hidden');
+        document.getElementById('adminSection').classList.remove('hidden');
+        
+        if (this.isLoggedIn) {
+            this.loadCollections();
+            this.loadPhotos();
+        }
+    }
+    
+    updateNavigation() {
+        const galleryBtn = document.getElementById('galleryBtn');
+        const adminBtn = document.getElementById('adminBtn');
+        
+        galleryBtn.classList.toggle('active', this.currentView === 'gallery');
+        adminBtn.classList.toggle('active', this.currentView === 'admin');
+    }
+    
+    // Authentication
     async checkAuthStatus() {
         try {
             const response = await fetch('/api/auth/status');
             const data = await response.json();
-            this.isLoggedIn = data.logged_in;
+            this.isLoggedIn = data.authenticated;
             
             if (this.isLoggedIn) {
-                this.showAdminPanel();
-                this.loadAdminData();
+                document.getElementById('logoutBtn').classList.remove('hidden');
             }
         } catch (error) {
             console.error('Error checking auth status:', error);
         }
     }
     
-    showView(view) {
-        // Update navigation
-        document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-        document.getElementById(view === 'admin' ? 'adminBtn' : 'homeBtn').classList.add('active');
+    async handleLogin() {
+        const password = document.getElementById('passwordInput').value;
         
-        // Update views
-        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        document.getElementById(view === 'admin' ? 'adminView' : 'galleryView').classList.add('active');
-        
-        this.currentView = view;
-    }
-    
-    async handleLogin(e) {
-        e.preventDefault();
-        const password = document.getElementById('adminPassword').value;
+        if (!password) {
+            this.showNotification('Please enter a password', 'error');
+            return;
+        }
         
         try {
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({ password })
             });
             
@@ -104,385 +135,161 @@ class PhotoGallery {
             
             if (data.success) {
                 this.isLoggedIn = true;
-                this.showAdminPanel();
-                this.loadAdminData();
-                this.showToast('Login successful', 'success');
+                this.showNotification('Login successful!', 'success');
+                
+                document.getElementById('loginForm').classList.add('hidden');
+                document.getElementById('adminPanel').classList.remove('hidden');
+                document.getElementById('logoutBtn').classList.remove('hidden');
+                
+                this.loadCollections();
+                this.loadPhotos();
             } else {
-                this.showToast(data.error || 'Login failed', 'error');
+                this.showNotification(data.error || 'Login failed', 'error');
             }
         } catch (error) {
-            this.showToast('Login error: ' + error.message, 'error');
+            console.error('Login error:', error);
+            this.showNotification('Login failed. Please try again.', 'error');
         }
     }
     
-    showAdminPanel() {
-        document.getElementById('adminLogin').style.display = 'none';
-        document.getElementById('adminPanel').style.display = 'block';
+    async handleLogout() {
+        try {
+            const response = await fetch('/api/auth/logout', {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                this.isLoggedIn = false;
+                this.showNotification('Logged out successfully', 'success');
+                
+                document.getElementById('loginForm').classList.remove('hidden');
+                document.getElementById('adminPanel').classList.add('hidden');
+                document.getElementById('logoutBtn').classList.add('hidden');
+                document.getElementById('passwordInput').value = '';
+            }
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
     }
     
+    // Collections Management
     async loadCollections() {
         try {
             const response = await fetch('/api/collections');
             const data = await response.json();
             
             if (data.success) {
-                this.renderCollections(data.collections);
-            } else {
-                this.showEmptyState('collectionsGrid', 'No collections created yet', 'Create your first collection in the admin panel');
+                this.collections = data.collections;
+                this.renderCollections();
+                this.updateCollectionOptions();
             }
         } catch (error) {
             console.error('Error loading collections:', error);
-            this.showEmptyState('collectionsGrid', 'Error loading collections', 'Please try refreshing the page');
         }
     }
     
-    async loadPhotos(collectionId = null) {
-        try {
-            const url = collectionId ? `/api/photos?collection_id=${collectionId}` : '/api/photos';
-            const response = await fetch(url);
-            const data = await response.json();
-            
-            if (data.success) {
-                this.renderPhotos(data.photos);
-                this.updatePhotosTitle(collectionId);
-            } else {
-                this.showEmptyState('photosGrid', 'No photos uploaded yet', 'Upload your first photos in the admin panel');
-            }
-        } catch (error) {
-            console.error('Error loading photos:', error);
-            this.showEmptyState('photosGrid', 'Error loading photos', 'Please try refreshing the page');
-        }
-    }
-    
-    renderCollections(collections) {
-        const grid = document.getElementById('collectionsGrid');
+    renderCollections() {
+        const galleryGrid = document.getElementById('collectionsGrid');
+        const adminGrid = document.getElementById('adminCollectionsGrid');
         
-        if (collections.length === 0) {
-            this.showEmptyState('collectionsGrid', 'No collections created yet', 'Create your first collection in the admin panel');
+        if (this.collections.length === 0) {
+            const emptyState = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📁</div>
+                    <h3 class="empty-state-title">No Collections Yet</h3>
+                    <p class="empty-state-text">Create your first collection to organize your photos</p>
+                </div>
+            `;
+            galleryGrid.innerHTML = emptyState;
+            if (adminGrid) adminGrid.innerHTML = emptyState;
             return;
         }
         
-        grid.innerHTML = collections.map(collection => `
-            <div class="collection-card" onclick="photoGallery.showCollection(${collection.id}, '${collection.name}')">
-                <h3>${this.escapeHtml(collection.name)}</h3>
-                <p>${collection.photo_count} photo${collection.photo_count !== 1 ? 's' : ''}</p>
+        const collectionsHTML = this.collections.map(collection => `
+            <div class="collection-card" onclick="photoGallery.viewCollection(${collection.id})">
+                <h3 class="collection-name">${this.escapeHtml(collection.name)}</h3>
+                <p class="collection-count">
+                    <span>📸</span>
+                    ${collection.photo_count} ${collection.photo_count === 1 ? 'photo' : 'photos'}
+                </p>
             </div>
         `).join('');
-    }
-    
-    renderPhotos(photos) {
-        const grid = document.getElementById('photosGrid');
         
-        if (photos.length === 0) {
-            this.showEmptyState('photosGrid', 'No photos in this collection', 'Add photos to this collection in the admin panel');
-            return;
-        }
+        galleryGrid.innerHTML = collectionsHTML;
         
-        grid.innerHTML = photos.map(photo => `
-            <div class="photo-card" onclick="photoGallery.showPhotoModal(${photo.id})">
-                <img src="${photo.cloudinary_secure_url}" alt="${this.escapeHtml(photo.title)}" loading="lazy">
-                <div class="photo-card-content">
-                    <h3>${this.escapeHtml(photo.title)}</h3>
-                    <p>${this.escapeHtml(photo.description || '')}</p>
+        if (adminGrid) {
+            const adminCollectionsHTML = this.collections.map(collection => `
+                <div class="collection-card">
+                    <h3 class="collection-name">${this.escapeHtml(collection.name)}</h3>
+                    <p class="collection-count">
+                        <span>📸</span>
+                        ${collection.photo_count} ${collection.photo_count === 1 ? 'photo' : 'photos'}
+                    </p>
+                    <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center;">
+                        <button class="btn btn-secondary" onclick="photoGallery.viewCollection(${collection.id})">
+                            View Photos
+                        </button>
+                        <button class="btn btn-danger" onclick="photoGallery.deleteCollection(${collection.id})">
+                            Delete
+                        </button>
+                    </div>
                 </div>
-            </div>
-        `).join('');
-    }
-    
-    showCollection(collectionId, collectionName) {
-        this.currentCollection = { id: collectionId, name: collectionName };
-        this.loadPhotos(collectionId);
-        document.getElementById('backToGallery').style.display = 'inline-flex';
-    }
-    
-    showAllPhotos() {
-        this.currentCollection = null;
-        this.loadPhotos();
-        this.updatePhotosTitle();
-        document.getElementById('backToGallery').style.display = 'none';
-    }
-    
-    updatePhotosTitle(collectionId = null) {
-        const title = document.getElementById('photosTitle');
-        const subtitle = document.getElementById('photosSubtitle');
-        
-        if (collectionId && this.currentCollection) {
-            title.textContent = `Collection: ${this.currentCollection.name}`;
-            subtitle.textContent = 'Photos in this collection';
-        } else {
-            title.textContent = 'All Photos';
-            subtitle.textContent = 'Your complete photo collection';
-        }
-    }
-    
-    showPhotoModal(photoId) {
-        // Find photo data
-        fetch(`/api/photos`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const photo = data.photos.find(p => p.id === photoId);
-                    if (photo) {
-                        document.getElementById('modalImage').src = photo.cloudinary_secure_url;
-                        document.getElementById('modalTitle').textContent = photo.title;
-                        document.getElementById('modalDescription').textContent = photo.description || '';
-                        document.getElementById('downloadBtn').onclick = () => this.downloadPhotoUrl(photo.cloudinary_secure_url, photo.title);
-                        document.getElementById('photoModal').classList.add('active');
-                    }
-                }
-            })
-            .catch(error => console.error('Error loading photo:', error));
-    }
-    
-    closeModal() {
-        document.getElementById('photoModal').classList.remove('active');
-    }
-    
-    downloadPhotoUrl(url, filename) {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename || 'photo';
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
-    
-    // Admin functionality
-    async loadAdminData() {
-        await this.loadAdminCollections();
-        await this.loadAdminPhotos();
-    }
-    
-    async loadAdminCollections() {
-        try {
-            const response = await fetch('/api/collections');
-            const data = await response.json();
+            `).join('');
             
-            if (data.success) {
-                this.renderAdminCollections(data.collections);
-                this.updateCollectionSelects(data.collections);
-            }
-        } catch (error) {
-            console.error('Error loading admin collections:', error);
+            adminGrid.innerHTML = adminCollectionsHTML;
         }
     }
     
-    async loadAdminPhotos() {
-        try {
-            const response = await fetch('/api/photos');
-            const data = await response.json();
-            
-            if (data.success) {
-                this.renderAdminPhotos(data.photos);
-            }
-        } catch (error) {
-            console.error('Error loading admin photos:', error);
-        }
-    }
-    
-    renderAdminCollections(collections) {
-        const list = document.getElementById('collectionsList');
+    updateCollectionOptions() {
+        const select = document.getElementById('collectionSelect');
+        if (!select) return;
         
-        if (collections.length === 0) {
-            list.innerHTML = '<p class="empty-state">No collections created yet</p>';
-            return;
-        }
+        select.innerHTML = '<option value="">No Collection</option>';
         
-        list.innerHTML = collections.map(collection => `
-            <div class="collection-item">
-                <div>
-                    <h4>${this.escapeHtml(collection.name)}</h4>
-                    <span>${collection.photo_count} photo${collection.photo_count !== 1 ? 's' : ''}</span>
-                </div>
-                <button class="btn-danger" onclick="photoGallery.deleteCollection(${collection.id})">Delete</button>
-            </div>
-        `).join('');
-    }
-    
-    renderAdminPhotos(photos) {
-        const list = document.getElementById('adminPhotosList');
-        
-        if (photos.length === 0) {
-            list.innerHTML = '<p class="empty-state">No photos uploaded yet</p>';
-            return;
-        }
-        
-        // Store photos for collection options
-        this.currentPhotos = photos;
-        
-        list.innerHTML = photos.map(photo => `
-            <div class="admin-photo-item">
-                <input type="checkbox" class="photo-checkbox" value="${photo.id}" onchange="photoGallery.updateSelectedPhotos()">
-                <img src="${photo.cloudinary_secure_url}" alt="${this.escapeHtml(photo.title)}">
-                <div class="admin-photo-info">
-                    <h4>${this.escapeHtml(photo.title)}</h4>
-                    <p>${this.escapeHtml(photo.description || '')}</p>
-                    <p><small>Collection: ${photo.collection_name || 'None'}</small></p>
-                </div>
-                <div class="admin-photo-actions">
-                    <select onchange="photoGallery.updatePhotoCollection(${photo.id}, this.value)">
-                        <option value="">No Collection</option>
-                        ${this.getCollectionOptionsForPhoto(photo.collection_id)}
-                    </select>
-                    <button class="btn-danger" onclick="photoGallery.deletePhoto(${photo.id})">Delete</button>
-                </div>
-            </div>
-        `).join('');
-    }
-    
-    updateCollectionSelects(collections) {
-        // Store collections for later use
-        this.currentCollections = collections;
-        
-        const selects = ['uploadCollection', 'bulkCollection'];
-        
-        selects.forEach(selectId => {
-            const select = document.getElementById(selectId);
-            const currentValue = select.value;
-            
-            select.innerHTML = '<option value="">No Collection</option>' +
-                collections.map(collection => 
-                    `<option value="${collection.id}">${this.escapeHtml(collection.name)}</option>`
-                ).join('');
-            
-            if (currentValue) select.value = currentValue;
+        this.collections.forEach(collection => {
+            const option = document.createElement('option');
+            option.value = collection.id;
+            option.textContent = collection.name;
+            select.appendChild(option);
         });
     }
     
-    getCollectionOptionsForPhoto(selectedId = null) {
-        if (!this.currentCollections) return '';
+    async createCollection() {
+        const name = document.getElementById('collectionNameInput').value.trim();
         
-        return this.currentCollections.map(collection => 
-            `<option value="${collection.id}" ${collection.id === selectedId ? 'selected' : ''}>${this.escapeHtml(collection.name)}</option>`
-        ).join('');
-    }
-    
-    // File upload handling
-    handleDragOver(e) {
-        e.preventDefault();
-        e.currentTarget.classList.add('dragover');
-    }
-    
-    handleDrop(e) {
-        e.preventDefault();
-        e.currentTarget.classList.remove('dragover');
-        const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
-        this.handleFiles(files);
-    }
-    
-    handleFileSelect(e) {
-        const files = Array.from(e.target.files);
-        this.handleFiles(files);
-    }
-    
-    handleFiles(files) {
-        if (files.length === 0) return;
-        
-        document.getElementById('uploadForm').style.display = 'block';
-        this.renderFilesList(files);
-    }
-    
-    renderFilesList(files) {
-        const list = document.getElementById('filesList');
-        
-        list.innerHTML = files.map((file, index) => `
-            <div class="file-item">
-                <div class="file-info">
-                    <h4>${this.escapeHtml(file.name)}</h4>
-                </div>
-                <div class="file-inputs">
-                    <input type="text" placeholder="Photo title" value="${this.escapeHtml(file.name.split('.')[0])}" data-index="${index}" data-field="title">
-                    <input type="text" placeholder="Description" data-index="${index}" data-field="description">
-                </div>
-            </div>
-        `).join('');
-        
-        // Store files for upload
-        this.pendingFiles = files;
-    }
-    
-    async uploadPhotos() {
-        if (!this.pendingFiles || this.pendingFiles.length === 0) return;
-        
-        const formData = new FormData();
-        const titles = [];
-        const descriptions = [];
-        
-        // Collect metadata
-        document.querySelectorAll('[data-field="title"]').forEach(input => {
-            titles.push(input.value || input.placeholder);
-        });
-        
-        document.querySelectorAll('[data-field="description"]').forEach(input => {
-            descriptions.push(input.value);
-        });
-        
-        // Add files and metadata
-        this.pendingFiles.forEach(file => formData.append('files', file));
-        titles.forEach(title => formData.append('titles', title));
-        descriptions.forEach(desc => formData.append('descriptions', desc));
-        
-        const collectionId = document.getElementById('uploadCollection').value;
-        if (collectionId) formData.append('collection_id', collectionId);
-        
-        try {
-            const response = await fetch('/api/photos', {
-                method: 'POST',
-                body: formData
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                this.showToast(`Successfully uploaded ${data.photos.length} photos`, 'success');
-                this.resetUploadForm();
-                this.loadAdminData();
-                this.loadCollections();
-                this.loadPhotos();
-            } else {
-                this.showToast(data.error || 'Upload failed', 'error');
-            }
-        } catch (error) {
-            this.showToast('Upload error: ' + error.message, 'error');
+        if (!name) {
+            this.showNotification('Please enter a collection name', 'error');
+            return;
         }
-    }
-    
-    resetUploadForm() {
-        document.getElementById('uploadForm').style.display = 'none';
-        document.getElementById('fileInput').value = '';
-        document.getElementById('filesList').innerHTML = '';
-        this.pendingFiles = null;
-    }
-    
-    async addCollection() {
-        const name = document.getElementById('newCollectionName').value.trim();
-        if (!name) return;
         
         try {
             const response = await fetch('/api/collections', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({ name })
             });
             
             const data = await response.json();
             
             if (data.success) {
-                this.showToast('Collection created successfully', 'success');
-                document.getElementById('newCollectionName').value = '';
-                this.loadAdminCollections();
+                this.showNotification('Collection created successfully!', 'success');
+                document.getElementById('collectionNameInput').value = '';
                 this.loadCollections();
             } else {
-                this.showToast(data.error || 'Failed to create collection', 'error');
+                this.showNotification(data.error || 'Failed to create collection', 'error');
             }
         } catch (error) {
-            this.showToast('Error creating collection: ' + error.message, 'error');
+            console.error('Error creating collection:', error);
+            this.showNotification('Failed to create collection', 'error');
         }
     }
     
     async deleteCollection(collectionId) {
-        if (!confirm('Are you sure you want to delete this collection? Photos will not be deleted, only unassigned.')) return;
+        if (!confirm('Are you sure you want to delete this collection? Photos will not be deleted, just unassigned.')) {
+            return;
+        }
         
         try {
             const response = await fetch(`/api/collections/${collectionId}`, {
@@ -492,172 +299,262 @@ class PhotoGallery {
             const data = await response.json();
             
             if (data.success) {
-                this.showToast('Collection deleted successfully', 'success');
-                this.loadAdminCollections();
+                this.showNotification('Collection deleted successfully!', 'success');
                 this.loadCollections();
                 this.loadPhotos();
             } else {
-                this.showToast(data.error || 'Failed to delete collection', 'error');
+                this.showNotification(data.error || 'Failed to delete collection', 'error');
             }
         } catch (error) {
-            this.showToast('Error deleting collection: ' + error.message, 'error');
+            console.error('Error deleting collection:', error);
+            this.showNotification('Failed to delete collection', 'error');
         }
     }
     
-    async deletePhoto(photoId) {
-        if (!confirm('Are you sure you want to delete this photo? This action cannot be undone.')) return;
+    async viewCollection(collectionId) {
+        this.selectedCollection = collectionId;
+        const collection = this.collections.find(c => c.id === collectionId);
         
-        try {
-            const response = await fetch(`/api/photos/${photoId}`, {
-                method: 'DELETE'
-            });
+        if (collection) {
+            // Update the gallery title
+            const galleryTitle = document.querySelector('#gallerySection .section-title');
+            galleryTitle.textContent = collection.name;
             
-            const data = await response.json();
+            // Add back button
+            const gallerySubtitle = document.querySelector('#gallerySection .section-subtitle');
+            gallerySubtitle.innerHTML = `
+                <button class="btn btn-secondary" onclick="photoGallery.showAllPhotos()" style="margin-bottom: 16px;">
+                    ← Back to All Photos
+                </button>
+                <br>
+                ${collection.photo_count} ${collection.photo_count === 1 ? 'photo' : 'photos'} in this collection
+            `;
             
-            if (data.success) {
-                this.showToast('Photo deleted successfully', 'success');
-                this.loadAdminData();
-                this.loadCollections();
-                this.loadPhotos();
-            } else {
-                this.showToast(data.error || 'Failed to delete photo', 'error');
+            // Load photos for this collection
+            this.loadPhotos(collectionId);
+            
+            // Switch to gallery view if not already there
+            if (this.currentView !== 'gallery') {
+                this.showGalleryView();
             }
-        } catch (error) {
-            this.showToast('Error deleting photo: ' + error.message, 'error');
         }
     }
     
-    async updatePhotoCollection(photoId, collectionId) {
+    showAllPhotos() {
+        this.selectedCollection = null;
+        
+        // Reset gallery title
+        const galleryTitle = document.querySelector('#gallerySection .section-title');
+        galleryTitle.textContent = 'Photo Gallery';
+        
+        const gallerySubtitle = document.querySelector('#gallerySection .section-subtitle');
+        gallerySubtitle.textContent = 'Beautiful moments captured and organized';
+        
+        this.loadPhotos();
+    }
+    
+    // Photos Management
+    async loadPhotos(collectionId = null) {
         try {
-            const response = await fetch(`/api/photos/${photoId}/collection`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ collection_id: collectionId || null })
-            });
-            
+            const url = collectionId ? `/api/photos?collection_id=${collectionId}` : '/api/photos';
+            const response = await fetch(url);
             const data = await response.json();
             
             if (data.success) {
-                this.showToast('Photo collection updated', 'success');
-                this.loadAdminData();
-                this.loadCollections();
-            } else {
-                this.showToast(data.error || 'Failed to update photo collection', 'error');
+                this.photos = data.photos;
+                this.renderPhotos();
             }
         } catch (error) {
-            this.showToast('Error updating photo collection: ' + error.message, 'error');
+            console.error('Error loading photos:', error);
         }
     }
     
-    updateSelectedPhotos() {
-        this.selectedPhotos.clear();
-        document.querySelectorAll('.photo-checkbox:checked').forEach(checkbox => {
-            this.selectedPhotos.add(parseInt(checkbox.value));
-        });
-    }
-    
-    toggleSelectAll(e) {
-        const checkboxes = document.querySelectorAll('.photo-checkbox');
-        checkboxes.forEach(checkbox => {
-            checkbox.checked = e.target.checked;
-        });
-        this.updateSelectedPhotos();
-    }
-    
-    async bulkAssignCollection() {
-        if (this.selectedPhotos.size === 0) {
-            this.showToast('No photos selected', 'error');
+    renderPhotos() {
+        const photosGrid = document.getElementById('photosGrid');
+        
+        if (this.photos.length === 0) {
+            const emptyState = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📷</div>
+                    <h3 class="empty-state-title">No Photos Yet</h3>
+                    <p class="empty-state-text">Upload your first photos to get started</p>
+                </div>
+            `;
+            photosGrid.innerHTML = emptyState;
             return;
         }
         
-        const collectionId = document.getElementById('bulkCollection').value;
+        const photosHTML = this.photos.map(photo => `
+            <div class="photo-item" onclick="photoGallery.viewPhoto('${photo.cloudinary_url}', '${this.escapeHtml(photo.title)}')">
+                <img src="${photo.cloudinary_url}" alt="${this.escapeHtml(photo.title)}" loading="lazy">
+                <div class="photo-info">
+                    <h3 class="photo-title">${this.escapeHtml(photo.title)}</h3>
+                    ${photo.description ? `<p class="photo-description">${this.escapeHtml(photo.description)}</p>` : ''}
+                </div>
+            </div>
+        `).join('');
         
-        try {
-            const response = await fetch('/api/photos/bulk-update', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    photo_ids: Array.from(this.selectedPhotos),
-                    collection_id: collectionId || null
-                })
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                this.showToast(`Updated ${data.updated_count} photos`, 'success');
-                this.selectedPhotos.clear();
-                document.getElementById('selectAllPhotos').checked = false;
-                this.loadAdminData();
-                this.loadCollections();
-            } else {
-                this.showToast(data.error || 'Failed to update photos', 'error');
-            }
-        } catch (error) {
-            this.showToast('Error updating photos: ' + error.message, 'error');
-        }
+        photosGrid.innerHTML = photosHTML;
     }
     
-    async bulkDeletePhotos() {
-        if (this.selectedPhotos.size === 0) {
-            this.showToast('No photos selected', 'error');
+    viewPhoto(imageUrl, title) {
+        const modal = document.getElementById('photoModal');
+        const modalImg = document.getElementById('modalImage');
+        const modalTitle = document.getElementById('modalTitle');
+        
+        modalImg.src = imageUrl;
+        modalTitle.textContent = title;
+        
+        modal.classList.add('active');
+    }
+    
+    closeModal() {
+        const modals = document.querySelectorAll('.modal');
+        modals.forEach(modal => modal.classList.remove('active'));
+    }
+    
+    // File Upload
+    handleFileSelect(event) {
+        const files = Array.from(event.target.files);
+        this.processFiles(files);
+    }
+    
+    handleDragOver(event) {
+        event.preventDefault();
+        event.currentTarget.classList.add('dragover');
+    }
+    
+    handleDragLeave(event) {
+        event.preventDefault();
+        event.currentTarget.classList.remove('dragover');
+    }
+    
+    handleDrop(event) {
+        event.preventDefault();
+        event.currentTarget.classList.remove('dragover');
+        
+        const files = Array.from(event.dataTransfer.files);
+        this.processFiles(files);
+    }
+    
+    processFiles(files) {
+        const imageFiles = files.filter(file => file.type.startsWith('image/'));
+        
+        if (imageFiles.length === 0) {
+            this.showNotification('Please select image files only', 'error');
             return;
         }
         
-        if (!confirm(`Are you sure you want to delete ${this.selectedPhotos.size} photos? This action cannot be undone.`)) return;
+        if (imageFiles.length > 10) {
+            this.showNotification('Maximum 10 files allowed at once', 'error');
+            return;
+        }
+        
+        // Update UI to show selected files
+        const uploadText = document.querySelector('.upload-text');
+        uploadText.textContent = `${imageFiles.length} file${imageFiles.length > 1 ? 's' : ''} selected`;
+        
+        // Store files for upload
+        this.selectedFiles = imageFiles;
+    }
+    
+    async uploadPhotos() {
+        if (!this.selectedFiles || this.selectedFiles.length === 0) {
+            this.showNotification('Please select files first', 'error');
+            return;
+        }
+        
+        const collectionId = document.getElementById('collectionSelect').value;
+        const formData = new FormData();
+        
+        // Add files
+        this.selectedFiles.forEach(file => {
+            formData.append('files', file);
+        });
+        
+        // Add metadata
+        this.selectedFiles.forEach(file => {
+            formData.append('titles', file.name.split('.')[0]);
+            formData.append('descriptions', '');
+        });
+        
+        if (collectionId) {
+            formData.append('collection_id', collectionId);
+        }
         
         try {
-            const response = await fetch('/api/photos/bulk-delete', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    photo_ids: Array.from(this.selectedPhotos)
-                })
+            // Show loading state
+            const uploadBtn = document.getElementById('uploadBtn');
+            const originalText = uploadBtn.textContent;
+            uploadBtn.innerHTML = '<span class="loading-spinner"></span> Uploading...';
+            uploadBtn.disabled = true;
+            
+            const response = await fetch('/api/photos', {
+                method: 'POST',
+                body: formData
             });
             
             const data = await response.json();
             
             if (data.success) {
-                this.showToast(`Deleted ${data.deleted_count} photos`, 'success');
-                this.selectedPhotos.clear();
-                document.getElementById('selectAllPhotos').checked = false;
-                this.loadAdminData();
-                this.loadCollections();
+                this.showNotification(`Successfully uploaded ${data.photos.length} photo${data.photos.length > 1 ? 's' : ''}!`, 'success');
+                
+                // Reset form
+                document.getElementById('fileInput').value = '';
+                document.getElementById('collectionSelect').value = '';
+                document.querySelector('.upload-text').textContent = 'Drag and drop photos here';
+                this.selectedFiles = [];
+                
+                // Reload data
                 this.loadPhotos();
+                this.loadCollections();
             } else {
-                this.showToast(data.error || 'Failed to delete photos', 'error');
+                this.showNotification(data.error || 'Upload failed', 'error');
             }
         } catch (error) {
-            this.showToast('Error deleting photos: ' + error.message, 'error');
+            console.error('Upload error:', error);
+            this.showNotification('Upload failed. Please try again.', 'error');
+        } finally {
+            // Reset button
+            const uploadBtn = document.getElementById('uploadBtn');
+            uploadBtn.textContent = originalText;
+            uploadBtn.disabled = false;
         }
     }
     
-    // Utility functions
-    showEmptyState(containerId, title, subtitle) {
-        const container = document.getElementById(containerId);
-        container.innerHTML = `
-            <div class="empty-state">
-                <h3>${title}</h3>
-                <p>${subtitle}</p>
+    // Utility Functions
+    showNotification(message, type = 'info') {
+        // Remove existing notifications
+        const existingNotifications = document.querySelectorAll('.notification');
+        existingNotifications.forEach(notification => notification.remove());
+        
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+        
+        notification.innerHTML = `
+            <div class="notification-content">
+                <span class="notification-icon">${icons[type] || icons.info}</span>
+                <span class="notification-text">${message}</span>
+                <button class="notification-close" onclick="this.parentElement.parentElement.remove()">×</button>
             </div>
         `;
-    }
-    
-    showToast(message, type = 'info') {
-        const container = document.getElementById('toastContainer');
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
         
-        container.appendChild(toast);
+        document.body.appendChild(notification);
         
-        // Trigger animation
-        setTimeout(() => toast.classList.add('show'), 100);
+        // Show notification
+        setTimeout(() => notification.classList.add('show'), 100);
         
-        // Remove after 5 seconds
+        // Auto remove after 5 seconds
         setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => container.removeChild(toast), 300);
+            notification.classList.remove('show');
+            setTimeout(() => notification.remove(), 300);
         }, 5000);
     }
     
@@ -668,6 +565,10 @@ class PhotoGallery {
     }
 }
 
-// Initialize the photo gallery
-const photoGallery = new PhotoGallery();
+// Initialize the application
+let photoGallery;
+
+document.addEventListener('DOMContentLoaded', () => {
+    photoGallery = new PhotoGallery();
+});
 
