@@ -1,50 +1,77 @@
-import os
+from flask import Blueprint, request, jsonify
+from werkzeug.utils import secure_filename
 import cloudinary
 import cloudinary.uploader
-from flask import Blueprint, request, jsonify, current_app
-from werkzeug.utils import secure_filename
-from src.models.photo import db, Photo, Collection
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-# Configure Cloudinary
-cloudinary.config(
-    cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME'),
-    api_key=os.getenv('CLOUDINARY_API_KEY'),
-    api_secret=os.getenv('CLOUDINARY_API_SECRET')
-)
+import os
+from src.models.photo import db, Photo, CloudinaryCollectionManager
+from PIL import Image
+import io
+import tempfile
 
 photos_bp = Blueprint('photos', __name__)
 
+# Supported file extensions including HEIC
+ALLOWED_EXTENSIONS = {
+    'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff', 'tif',
+    'heic', 'heif', 'avif', 'svg'
+}
+
 def allowed_file(filename):
     """Check if file extension is allowed"""
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff'}
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def convert_heic_to_jpg(file_content):
+    """Convert HEIC file to JPG format"""
+    try:
+        # Try to use PIL to convert HEIC
+        from PIL import Image
+        from pillow_heif import register_heif_opener
+        
+        # Register HEIF opener with PIL
+        register_heif_opener()
+        
+        # Open HEIC image
+        image = Image.open(io.BytesIO(file_content))
+        
+        # Convert to RGB if necessary
+        if image.mode in ('RGBA', 'LA', 'P'):
+            image = image.convert('RGB')
+        
+        # Save as JPG
+        output = io.BytesIO()
+        image.save(output, format='JPEG', quality=95)
+        output.seek(0)
+        
+        return output.getvalue(), 'jpg'
+        
+    except ImportError:
+        # Fallback: Upload HEIC directly to Cloudinary (it can handle conversion)
+        return file_content, 'heic'
+    except Exception as e:
+        print(f"Error converting HEIC: {str(e)}")
+        # Fallback: Upload HEIC directly to Cloudinary
+        return file_content, 'heic'
 
 @photos_bp.route('/photos', methods=['GET'])
 def get_photos():
-    """Get all photos with optional collection filtering"""
+    """Get all photos or photos from a specific collection - PERMANENT storage"""
     try:
         collection_id = request.args.get('collection_id')
         
         if collection_id:
-            try:
-                collection_id = int(collection_id)
-                photos = Photo.query.filter_by(collection_id=collection_id).order_by(Photo.uploaded_at.desc()).all()
-            except ValueError:
-                return jsonify({
-                    'success': False,
-                    'error': 'Invalid collection ID'
-                }), 400
+            # Get photos from specific collection
+            photos = CloudinaryCollectionManager.get_collection_photos(collection_id)
         else:
+            # Get all photos
             photos = Photo.query.order_by(Photo.uploaded_at.desc()).all()
+            photos = [photo.to_dict() for photo in photos]
         
         return jsonify({
             'success': True,
-            'photos': [photo.to_dict() for photo in photos]
+            'photos': photos
         })
+        
     except Exception as e:
         print(f"Error getting photos: {str(e)}")
         return jsonify({
@@ -54,7 +81,7 @@ def get_photos():
 
 @photos_bp.route('/photos', methods=['POST'])
 def upload_photos():
-    """Upload multiple photos to Cloudinary and save metadata to database"""
+    """Upload photos with HEIC support and permanent Cloudinary storage"""
     try:
         # Check if files are present
         if 'files' not in request.files:
@@ -70,95 +97,153 @@ def upload_photos():
                 'error': 'No files selected'
             }), 400
         
-        # Get form data
+        # Get metadata
         titles = request.form.getlist('titles')
         descriptions = request.form.getlist('descriptions')
         collection_id = request.form.get('collection_id')
         
         # Validate collection if provided
-        collection = None
-        if collection_id and collection_id != '' and collection_id != 'null':
-            try:
-                collection_id = int(collection_id)
-                collection = Collection.query.get(collection_id)
-                if not collection:
-                    return jsonify({
-                        'success': False,
-                        'error': 'Collection not found'
-                    }), 404
-            except ValueError:
+        if collection_id:
+            collection = CloudinaryCollectionManager.get_collection_by_id(collection_id)
+            if not collection:
                 return jsonify({
                     'success': False,
-                    'error': 'Invalid collection ID'
+                    'error': 'Invalid collection selected'
                 }), 400
-        else:
-            collection_id = None
         
         uploaded_photos = []
+        errors = []
         
         for i, file in enumerate(files):
-            if file and file.filename:
-                # Validate file type
-                if not allowed_file(file.filename):
-                    continue  # Skip invalid files
+            try:
+                if not file or file.filename == '':
+                    continue
                 
-                try:
-                    # Get metadata for this photo
-                    title = titles[i] if i < len(titles) and titles[i] else secure_filename(file.filename)
-                    description = descriptions[i] if i < len(descriptions) and descriptions[i] else ''
+                # Check file extension
+                if not allowed_file(file.filename):
+                    errors.append(f"File {file.filename}: Unsupported file type")
+                    continue
+                
+                # Read file content
+                file_content = file.read()
+                if len(file_content) == 0:
+                    errors.append(f"File {file.filename}: Empty file")
+                    continue
+                
+                # Check file size (max 10MB)
+                if len(file_content) > 10 * 1024 * 1024:
+                    errors.append(f"File {file.filename}: File too large (max 10MB)")
+                    continue
+                
+                # Get original filename and extension
+                original_filename = secure_filename(file.filename)
+                file_extension = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
+                
+                # Handle HEIC files
+                if file_extension in ['heic', 'heif']:
+                    try:
+                        file_content, file_extension = convert_heic_to_jpg(file_content)
+                        print(f"Converted HEIC file {original_filename} to {file_extension}")
+                    except Exception as e:
+                        print(f"HEIC conversion warning for {original_filename}: {str(e)}")
+                        # Continue with original file - Cloudinary can handle HEIC
+                
+                # Prepare upload parameters
+                upload_params = {
+                    'resource_type': 'image',
+                    'quality': 'auto:good',
+                    'fetch_format': 'auto',
+                    'flags': 'progressive',
+                    'overwrite': False
+                }
+                
+                # Add to collection folder if specified
+                if collection_id:
+                    upload_params['folder'] = collection_id
+                    upload_params['public_id'] = f"{collection_id}/{original_filename.rsplit('.', 1)[0]}_{i}"
+                else:
+                    upload_params['public_id'] = f"uncategorized/{original_filename.rsplit('.', 1)[0]}_{i}"
+                
+                # Upload to Cloudinary
+                with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                    temp_file.write(file_content)
+                    temp_file.flush()
                     
-                    # Upload to Cloudinary
-                    upload_result = cloudinary.uploader.upload(
-                        file,
-                        folder="photo_gallery",
-                        resource_type="image",
-                        quality="auto",
-                        fetch_format="auto"
+                    result = cloudinary.uploader.upload(
+                        temp_file.name,
+                        **upload_params
                     )
                     
-                    # Save to database
-                    photo = Photo(
-                        title=title,
-                        description=description,
-                        filename=secure_filename(file.filename),
-                        cloudinary_public_id=upload_result['public_id'],
-                        cloudinary_url=upload_result['secure_url'],
-                        collection_id=collection_id
-                    )
-                    
-                    db.session.add(photo)
-                    uploaded_photos.append(photo)
-                    
-                except Exception as upload_error:
-                    print(f"Error uploading file {file.filename}: {str(upload_error)}")
-                    continue  # Skip this file and continue with others
-        
-        if not uploaded_photos:
-            return jsonify({
-                'success': False,
-                'error': 'No valid files were uploaded'
-            }), 400
+                    # Clean up temp file
+                    os.unlink(temp_file.name)
+                
+                # Get title and description
+                title = titles[i] if i < len(titles) and titles[i] else original_filename.rsplit('.', 1)[0]
+                description = descriptions[i] if i < len(descriptions) and descriptions[i] else ''
+                
+                # Save to database
+                photo = Photo(
+                    title=title,
+                    description=description,
+                    cloudinary_public_id=result['public_id'],
+                    cloudinary_url=result['url'],
+                    cloudinary_secure_url=result['secure_url'],
+                    cloudinary_folder=collection_id if collection_id else None,
+                    original_filename=original_filename,
+                    file_format=result.get('format', file_extension),
+                    file_size=result.get('bytes', len(file_content)),
+                    width=result.get('width'),
+                    height=result.get('height')
+                )
+                
+                db.session.add(photo)
+                uploaded_photos.append(photo.to_dict())
+                
+            except Exception as e:
+                error_msg = f"File {file.filename}: {str(e)}"
+                print(f"Upload error: {error_msg}")
+                errors.append(error_msg)
+                continue
         
         # Commit all successful uploads
-        db.session.commit()
+        if uploaded_photos:
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                return jsonify({
+                    'success': False,
+                    'error': f'Database error: {str(e)}'
+                }), 500
         
-        return jsonify({
-            'success': True,
-            'message': f'Successfully uploaded {len(uploaded_photos)} photos',
-            'photos': [photo.to_dict() for photo in uploaded_photos]
-        }), 201
-        
+        # Return results
+        if uploaded_photos:
+            response = {
+                'success': True,
+                'message': f'Successfully uploaded {len(uploaded_photos)} photo(s)',
+                'photos': uploaded_photos
+            }
+            if errors:
+                response['warnings'] = errors
+            return jsonify(response), 201
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'No photos were uploaded successfully',
+                'details': errors
+            }), 400
+            
     except Exception as e:
         db.session.rollback()
-        print(f"Error uploading photos: {str(e)}")
+        print(f"Upload error: {str(e)}")
         return jsonify({
             'success': False,
-            'error': 'Failed to upload photos'
+            'error': f'Upload failed: {str(e)}'
         }), 500
 
 @photos_bp.route('/photos/<int:photo_id>', methods=['DELETE'])
 def delete_photo(photo_id):
-    """Delete a photo from Cloudinary and database"""
+    """Delete a photo from both Cloudinary and database - PERMANENT deletion"""
     try:
         photo = Photo.query.get(photo_id)
         if not photo:
@@ -170,9 +255,9 @@ def delete_photo(photo_id):
         # Delete from Cloudinary
         try:
             cloudinary.uploader.destroy(photo.cloudinary_public_id)
-        except Exception as cloudinary_error:
-            print(f"Error deleting from Cloudinary: {str(cloudinary_error)}")
-            # Continue with database deletion even if Cloudinary fails
+        except Exception as e:
+            print(f"Error deleting from Cloudinary: {str(e)}")
+            # Continue with database deletion even if Cloudinary deletion fails
         
         # Delete from database
         db.session.delete(photo)
@@ -203,24 +288,17 @@ def update_photo(photo_id):
             }), 404
         
         data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
         
-        # Update fields if provided
+        # Update fields
         if 'title' in data:
             photo.title = data['title']
         if 'description' in data:
             photo.description = data['description']
-        if 'collection_id' in data:
-            collection_id = data['collection_id']
-            if collection_id:
-                collection = Collection.query.get(collection_id)
-                if not collection:
-                    return jsonify({
-                        'success': False,
-                        'error': 'Collection not found'
-                    }), 404
-                photo.collection_id = collection_id
-            else:
-                photo.collection_id = None
         
         db.session.commit()
         
@@ -236,79 +314,5 @@ def update_photo(photo_id):
         return jsonify({
             'success': False,
             'error': 'Failed to update photo'
-        }), 500
-
-@photos_bp.route('/photos/bulk-update', methods=['POST'])
-def bulk_update_photos():
-    """Bulk update photos (assign to collection or delete)"""
-    try:
-        data = request.get_json()
-        photo_ids = data.get('photo_ids', [])
-        action = data.get('action')
-        
-        if not photo_ids:
-            return jsonify({
-                'success': False,
-                'error': 'No photos selected'
-            }), 400
-        
-        photos = Photo.query.filter(Photo.id.in_(photo_ids)).all()
-        if not photos:
-            return jsonify({
-                'success': False,
-                'error': 'No valid photos found'
-            }), 404
-        
-        if action == 'assign_collection':
-            collection_id = data.get('collection_id')
-            if collection_id:
-                collection = Collection.query.get(collection_id)
-                if not collection:
-                    return jsonify({
-                        'success': False,
-                        'error': 'Collection not found'
-                    }), 404
-            
-            for photo in photos:
-                photo.collection_id = collection_id
-            
-            db.session.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': f'Successfully updated {len(photos)} photos'
-            })
-        
-        elif action == 'delete':
-            # Delete from Cloudinary and database
-            deleted_count = 0
-            for photo in photos:
-                try:
-                    cloudinary.uploader.destroy(photo.cloudinary_public_id)
-                except Exception as cloudinary_error:
-                    print(f"Error deleting from Cloudinary: {str(cloudinary_error)}")
-                
-                db.session.delete(photo)
-                deleted_count += 1
-            
-            db.session.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': f'Successfully deleted {deleted_count} photos'
-            })
-        
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'Invalid action'
-            }), 400
-        
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error in bulk update: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to update photos'
         }), 500
 

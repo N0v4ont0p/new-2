@@ -1,35 +1,17 @@
 from flask import Blueprint, request, jsonify
 import re
-from src.models.photo import db, Collection, Photo
+from src.models.photo import db, CloudinaryCollectionManager
 
 collections_bp = Blueprint('collections', __name__)
 
-def validate_collection_name(name):
-    """Validate collection name"""
-    if not name or not isinstance(name, str):
-        return False, "Collection name is required"
-    
-    name = name.strip()
-    if len(name) < 1:
-        return False, "Collection name cannot be empty"
-    
-    if len(name) > 100:
-        return False, "Collection name is too long (max 100 characters)"
-    
-    # Allow letters, numbers, spaces, hyphens, underscores, and common punctuation
-    if not re.match(r'^[a-zA-Z0-9\s\-_.,!?()&]+$', name):
-        return False, "Collection name contains invalid characters"
-    
-    return True, name
-
 @collections_bp.route('/collections', methods=['GET'])
 def get_collections():
-    """Get all collections with photo counts"""
+    """Get all collections from Cloudinary folders - PERMANENT storage"""
     try:
-        collections = Collection.query.order_by(Collection.created_at.desc()).all()
+        collections = CloudinaryCollectionManager.get_all_collections()
         return jsonify({
             'success': True,
-            'collections': [collection.to_dict() for collection in collections]
+            'collections': collections
         })
     except Exception as e:
         print(f"Error getting collections: {str(e)}")
@@ -40,7 +22,7 @@ def get_collections():
 
 @collections_bp.route('/collections', methods=['POST'])
 def create_collection():
-    """Create a new collection"""
+    """Create a new collection using Cloudinary folders - PERMANENT storage"""
     try:
         data = request.get_json()
         if not data:
@@ -49,88 +31,90 @@ def create_collection():
                 'error': 'No data provided'
             }), 400
             
-        name = data.get('name', '')
+        name = data.get('name', '').strip()
         
-        # Validate collection name
-        is_valid, result = validate_collection_name(name)
-        if not is_valid:
+        if not name:
             return jsonify({
                 'success': False,
-                'error': result
+                'error': 'Collection name is required'
             }), 400
         
-        name = result  # Use the cleaned name
-        
-        # Check if collection with this name already exists
-        existing_collection = Collection.query.filter_by(name=name).first()
-        if existing_collection:
+        if len(name) > 100:
             return jsonify({
                 'success': False,
-                'error': 'Collection with this name already exists'
-            }), 409
+                'error': 'Collection name is too long (max 100 characters)'
+            }), 400
         
-        # Create new collection
-        collection = Collection(name=name)
-        db.session.add(collection)
-        db.session.commit()
+        # Create collection using Cloudinary folders
+        collection, error = CloudinaryCollectionManager.create_collection(name)
+        
+        if error:
+            return jsonify({
+                'success': False,
+                'error': error
+            }), 409 if 'already exists' in error else 400
         
         return jsonify({
             'success': True,
             'message': 'Collection created successfully',
-            'collection': collection.to_dict()
+            'collection': collection
         }), 201
         
     except Exception as e:
-        db.session.rollback()
         print(f"Error creating collection: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Failed to create collection'
         }), 500
 
-@collections_bp.route('/collections/<int:collection_id>', methods=['DELETE'])
+@collections_bp.route('/collections/<collection_id>', methods=['DELETE'])
 def delete_collection(collection_id):
-    """Delete a collection and remove it from all associated photos"""
+    """Delete a collection and all its photos from Cloudinary - PERMANENT deletion"""
     try:
-        collection = Collection.query.get(collection_id)
-        if not collection:
+        success, message = CloudinaryCollectionManager.delete_collection(collection_id)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': message
+            })
+        else:
             return jsonify({
                 'success': False,
-                'error': 'Collection not found'
-            }), 404
+                'error': message
+            }), 500
         
-        # Remove collection assignment from all photos in this collection
-        photos_in_collection = Photo.query.filter_by(collection_id=collection_id).all()
-        for photo in photos_in_collection:
-            photo.collection_id = None
-        
-        # Delete the collection
-        db.session.delete(collection)
-        db.session.commit()
+    except Exception as e:
+        print(f"Error deleting collection: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to delete collection'
+        }), 500
+
+@collections_bp.route('/collections/<collection_id>/photos', methods=['GET'])
+def get_collection_photos(collection_id):
+    """Get all photos in a specific collection - PERMANENT storage"""
+    try:
+        photos = CloudinaryCollectionManager.get_collection_photos(collection_id)
+        collection = CloudinaryCollectionManager.get_collection_by_id(collection_id)
         
         return jsonify({
             'success': True,
-            'message': f'Collection deleted successfully. {len(photos_in_collection)} photos were unassigned from this collection.'
+            'photos': photos,
+            'collection': collection
         })
         
     except Exception as e:
-        db.session.rollback()
+        print(f"Error getting collection photos: {str(e)}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to fetch collection photos'
         }), 500
 
-@collections_bp.route('/collections/<int:collection_id>', methods=['PUT'])
+@collections_bp.route('/collections/<collection_id>', methods=['PUT'])
 def update_collection(collection_id):
-    """Update collection name"""
+    """Update collection name - PERMANENT storage"""
     try:
-        collection = Collection.query.get(collection_id)
-        if not collection:
-            return jsonify({
-                'success': False,
-                'error': 'Collection not found'
-            }), 404
-        
         data = request.get_json()
         new_name = data.get('name', '').strip()
         
@@ -140,31 +124,17 @@ def update_collection(collection_id):
                 'error': 'Collection name is required'
             }), 400
         
-        # Check if another collection with this name already exists
-        existing_collection = Collection.query.filter(
-            Collection.name == new_name,
-            Collection.id != collection_id
-        ).first()
-        
-        if existing_collection:
-            return jsonify({
-                'success': False,
-                'error': 'Collection with this name already exists'
-            }), 409
-        
-        collection.name = new_name
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Collection updated successfully',
-            'collection': collection.to_dict()
-        })
-        
-    except Exception as e:
-        db.session.rollback()
+        # For now, we don't support renaming Cloudinary folders
+        # This would require moving all photos to a new folder
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Collection renaming is not supported yet'
+        }), 400
+        
+    except Exception as e:
+        print(f"Error updating collection: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to update collection'
         }), 500
 
