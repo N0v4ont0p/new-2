@@ -14,7 +14,14 @@ def login():
         data = request.get_json()
         password = data.get('password', '')
         
-        admin_password = os.getenv('ADMIN_PASSWORD', 'Hanshow99@')
+        # Get admin password from environment variable (no default hardcoded password)
+        admin_password = os.getenv('ADMIN_PASSWORD')
+        
+        if not admin_password:
+            return jsonify({
+                'success': False,
+                'error': 'Admin password not configured. Please set ADMIN_PASSWORD environment variable.'
+            }), 500
         
         if password == admin_password:
             session['admin_logged_in'] = True
@@ -56,7 +63,7 @@ def auth_status():
         is_logged_in = session.get('admin_logged_in', False)
         return jsonify({
             'success': True,
-            'logged_in': is_logged_in
+            'authenticated': is_logged_in
         })
     except Exception as e:
         return jsonify({
@@ -77,4 +84,3 @@ def require_admin_auth(f):
             }), 401
         return f(*args, **kwargs)
     return decorated_function
-

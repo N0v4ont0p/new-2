@@ -1,181 +1,231 @@
-# 📸 George's Photo Gallery
+# 📸 Premium Photo Gallery
 
-A premium photo gallery website with Apple-inspired design, Cloudinary integration for permanent storage, and a secure admin panel. Built for deployment on Render.com.
+A beautiful, Apple-inspired photo gallery with permanent cloud storage, collection management, and admin panel.
 
 ## ✨ Features
 
 ### 🎨 Beautiful Gallery
-- **Modern, responsive design** with Apple-inspired aesthetics
-- **Smooth animations** and hover effects
-- **Mobile-friendly layout** that works on all devices
-- **Professional photography showcase** with clean grid layouts
+- Modern, responsive Apple-style design
+- Smooth animations and hover effects
+- Mobile-friendly layout
+- Professional photography showcase
+- Enhanced glassmorphism and frosted glass effects
 
 ### 🔐 Secure Admin Panel
-- **Password-protected admin access** (Password: `Hanshow99@`)
-- **Drag & drop photo upload** with metadata support
-- **Easy photo management** (delete/edit collections)
-- **Batch upload support** for multiple photos at once
-- **Collection management** with create/delete functionality
-- **Bulk operations** for efficient photo organization
+- Password-protected admin access (configurable)
+- Drag & drop photo upload with HEIC support
+- Easy photo management (delete/edit)
+- Batch upload support (up to 10 files)
+- Collection creation and management
 
 ### ☁️ PERMANENT STORAGE
 - **Cloudinary integration** for permanent photo storage
 - **Photos NEVER disappear** (even after server restarts)
-- **Global CDN** for fast loading worldwide
-- **25GB free storage** (thousands of photos)
-- **Automatic fallback** if cloud storage fails
-- **Database persistence** for all metadata and collections
+- **Collections stored as Cloudinary folders** - truly permanent
+- Global CDN for fast loading worldwide
+- 25GB free storage (thousands of photos)
+- Automatic fallback if cloud storage fails
 
-## 🚀 Deployment on Render.com
+### 📱 File Format Support
+- **HEIC/HEIF support** - iPhone photos work perfectly
+- JPG, JPEG, PNG, GIF, WebP, BMP, TIFF
+- AVIF, SVG support
+- Automatic HEIC to JPG conversion
+- 10MB file size limit per photo
+
+## 🚀 Quick Start
 
 ### Prerequisites
-1. **Cloudinary Account**: Sign up at [cloudinary.com](https://cloudinary.com) for free
-2. **Render Account**: Sign up at [render.com](https://render.com)
-3. **GitHub Repository**: Push this code to your GitHub repository
+- Python 3.11+
+- Cloudinary account (free tier available)
 
-### Step 1: Get Cloudinary Credentials
-1. Log in to your Cloudinary dashboard
-2. Copy your **Cloud Name**, **API Key**, and **API Secret**
-3. Keep these credentials handy for the next step
+### Environment Variables
+Create a `.env` file with:
 
-### Step 2: Deploy to Render
-1. **Connect Repository**:
-   - Go to [render.com](https://render.com) and log in
-   - Click "New +" → "Web Service"
-   - Connect your GitHub repository containing this code
+```env
+# Cloudinary Configuration (Required)
+CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+CLOUDINARY_API_KEY=your_cloudinary_api_key
+CLOUDINARY_API_SECRET=your_cloudinary_api_secret
 
-2. **Configure Service**:
-   - **Name**: `georges-photo-gallery` (or your preferred name)
-   - **Environment**: `Python`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `python src/main.py`
-   - **Plan**: Free (or paid for better performance)
+# Admin Configuration (Required)
+ADMIN_PASSWORD=your_custom_admin_password
 
-3. **Set Environment Variables**:
-   Add these environment variables in Render's dashboard:
-   ```
-   CLOUDINARY_CLOUD_NAME=your_cloud_name_here
-   CLOUDINARY_API_KEY=your_api_key_here
-   CLOUDINARY_API_SECRET=your_api_secret_here
-   ADMIN_PASSWORD=Hanshow99@
-   SECRET_KEY=your_secret_key_here
-   FLASK_ENV=production
-   ```
+# Flask Configuration (Optional)
+SECRET_KEY=your_secret_key_for_sessions
+DATABASE_DIR=/tmp
+```
 
-4. **Deploy**:
-   - Click "Create Web Service"
-   - Wait for deployment to complete (usually 2-5 minutes)
-   - Your gallery will be available at `https://your-service-name.onrender.com`
+### Local Development
 
-### Step 3: Test Your Deployment
-1. Visit your deployed URL
-2. Test the public gallery (should show empty initially)
-3. Click "Admin" and log in with password: `Hanshow99@`
-4. Create a test collection
-5. Upload a test photo to verify Cloudinary integration
+1. **Clone and setup:**
+```bash
+cd photo-gallery
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-## 📱 Usage Guide
+2. **Configure environment:**
+   - Copy `.env.example` to `.env`
+   - Add your Cloudinary credentials
+   - Set your custom admin password
 
-### For Visitors (Public Gallery)
-1. **Browse Collections**: View organized photo collections on the main page
-2. **View Photos**: Click any collection to see photos within it
-3. **Photo Preview**: Click individual photos to open in full-screen modal
-4. **Download Photos**: Use the download button in photo preview
-5. **Navigation**: Use the back button to return to main gallery
+3. **Run the application:**
+```bash
+python src/main.py
+```
 
-### For Admin (George)
-1. **Access Admin Panel**: Click "Admin" button and enter password
-2. **Upload Photos**:
-   - Drag and drop photos onto the upload area, or click to select files
-   - Add titles and descriptions for each photo
-   - Assign photos to collections (optional)
-   - Click "Upload Photos" to save to Cloudinary
+4. **Access the gallery:**
+   - Open http://localhost:5000
+   - Click "Admin" and login with your password
 
-3. **Manage Collections**:
-   - Enter collection name and click "Add Collection"
-   - Delete collections using the red "Delete" button
-   - Photos remain when collections are deleted
+## 🌐 Deployment on Render.com
 
-4. **Manage Photos**:
-   - View all uploaded photos with thumbnails
-   - Change photo collections using dropdown menus
-   - Delete individual photos with "Delete" button
-   - Use bulk operations:
-     - Select multiple photos with checkboxes
-     - Assign selected photos to a collection
-     - Delete multiple photos at once
+### Step 1: Prepare Repository
+1. Push your code to GitHub
+2. Ensure all files are committed
 
-## 🛠️ Technical Details
+### Step 2: Create Render Service
+1. Go to [Render.com](https://render.com)
+2. Connect your GitHub repository
+3. Choose "Web Service"
 
-### Architecture
-- **Backend**: Flask (Python) with SQLAlchemy ORM
-- **Frontend**: Vanilla HTML/CSS/JavaScript with Apple-inspired design
-- **Database**: SQLite (development) / PostgreSQL (production recommended)
-- **Storage**: Cloudinary for photos, database for metadata
-- **Hosting**: Render.com web service
+### Step 3: Configure Build Settings
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `python src/main.py`
+- **Environment:** Python
 
-### Key Technologies
-- **Flask-CORS**: Cross-origin resource sharing
-- **Cloudinary**: Cloud-based image management
-- **SQLAlchemy**: Database ORM for persistent storage
-- **Inter Font**: Modern typography matching Apple's design language
+### Step 4: Set Environment Variables
+In Render dashboard, add these environment variables:
 
-### Security Features
-- Password-protected admin panel
+| Variable | Value | Required |
+|----------|-------|----------|
+| `CLOUDINARY_CLOUD_NAME` | Your Cloudinary cloud name | ✅ |
+| `CLOUDINARY_API_KEY` | Your Cloudinary API key | ✅ |
+| `CLOUDINARY_API_SECRET` | Your Cloudinary API secret | ✅ |
+| `ADMIN_PASSWORD` | Your custom admin password | ✅ |
+| `SECRET_KEY` | Random secret for sessions | ⚠️ |
+
+### Step 5: Deploy
+1. Click "Create Web Service"
+2. Wait for deployment (2-5 minutes)
+3. Access your live gallery!
+
+## 🔧 Configuration
+
+### Cloudinary Setup
+1. Create free account at [cloudinary.com](https://cloudinary.com)
+2. Get your credentials from the dashboard
+3. Add them to your environment variables
+
+### Admin Password
+- Set `ADMIN_PASSWORD` environment variable
+- Use a strong, unique password
+- This password protects your admin panel
+
+### File Upload Limits
+- Maximum 10 files per upload
+- 10MB per file limit
+- Supports all major image formats including HEIC
+
+## 📁 Project Structure
+
+```
+photo-gallery/
+├── src/
+│   ├── main.py              # Flask application entry point
+│   ├── models/
+│   │   └── photo.py         # Database models and Cloudinary manager
+│   ├── routes/
+│   │   ├── auth.py          # Authentication routes
+│   │   ├── photos.py        # Photo management routes
+│   │   └── collections.py   # Collection management routes
+│   └── static/
+│       ├── index.html       # Main HTML template
+│       ├── styles.css       # Apple-inspired CSS with glassmorphism
+│       └── script.js        # JavaScript functionality
+├── requirements.txt         # Python dependencies
+├── render.yaml             # Render.com configuration
+└── README.md               # This file
+```
+
+## 🎨 Design Features
+
+### Apple-Inspired Aesthetics
+- Clean white backgrounds with subtle gradients
+- SF Pro Display typography hierarchy
+- Precise spacing using 8pt grid system
+- Subtle shadows and rounded corners
+
+### Enhanced Glassmorphism
+- Frosted glass navigation bar
+- Translucent cards and modals
+- Backdrop blur effects
+- Smooth animations and transitions
+
+### Responsive Design
+- Mobile-first approach
+- Touch-friendly interactions
+- Adaptive layouts for all screen sizes
+
+## 🔒 Security Features
+
+- Environment variable-based configuration
 - Session-based authentication
-- CORS configuration for secure API access
-- Environment variable configuration for sensitive data
+- Secure file upload validation
+- CORS protection
+- Input sanitization
 
-## 🎨 Design Philosophy
+## 🚀 Performance
 
-This gallery embodies **Apple's design principles**:
-- **Sleek minimalism** with generous white space
-- **Smooth animations** and elegant transitions
-- **Bold visual hierarchy** with clean typography
-- **Intuitive navigation** with consistent interactions
-- **Premium feel** through glassmorphism effects
-- **Mobile-first responsive design**
+- Cloudinary CDN for global fast loading
+- Lazy loading for images
+- Optimized image delivery
+- Progressive web app features
 
-## 📊 Storage & Performance
+## 📱 Mobile Support
 
-### Cloudinary Benefits
-- **25GB free storage** (upgradeable)
-- **Global CDN** for fast worldwide access
-- **Automatic optimization** for different devices
-- **Permanent storage** that survives server restarts
-- **Professional image management** with transformations
+- Touch-friendly interface
+- Responsive grid layouts
+- Mobile-optimized upload experience
+- Swipe gestures for navigation
 
-### Performance Features
-- **Lazy loading** for images
-- **Responsive images** for different screen sizes
-- **Efficient database queries** with proper indexing
-- **Caching strategies** for optimal loading times
+## 🛠️ Troubleshooting
 
-## 🔧 Maintenance
+### Common Issues
 
-### Regular Tasks
-- Monitor Cloudinary usage in dashboard
-- Backup database periodically (if using paid hosting)
-- Update dependencies as needed
-- Monitor server performance in Render dashboard
+**Upload fails:**
+- Check Cloudinary credentials
+- Verify file format is supported
+- Ensure file size is under 10MB
 
-### Troubleshooting
-- **Photos not uploading**: Check Cloudinary credentials
-- **Admin login fails**: Verify ADMIN_PASSWORD environment variable
-- **Collections not saving**: Ensure database is properly configured
-- **Slow loading**: Consider upgrading to paid Render plan
+**Collections not showing:**
+- Verify Cloudinary connection
+- Check browser console for errors
+- Refresh the page
 
-## 📞 Support
+**Admin login fails:**
+- Verify `ADMIN_PASSWORD` environment variable
+- Check for typos in password
+- Clear browser cache
 
-For technical issues or questions:
-1. Check Render deployment logs
-2. Verify Cloudinary dashboard for upload issues
-3. Ensure all environment variables are set correctly
-4. Test locally first if issues persist
+### Getting Help
+
+1. Check the browser console for errors
+2. Verify all environment variables are set
+3. Test Cloudinary connection
+4. Check server logs for detailed error messages
+
+## 📄 License
+
+This project is open source and available under the MIT License.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
-**Built with ❤️ for George's photography collection**
-
-*Featuring Apple-inspired design, permanent cloud storage, and professional photo management capabilities.*
+**Built with ❤️ using Flask, Cloudinary, and Apple-inspired design principles.**
 

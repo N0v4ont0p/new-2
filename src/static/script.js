@@ -1,4 +1,4 @@
-// Photo Gallery Application - Apple-style JavaScript
+// Photo Gallery Application - Apple-style JavaScript with Collection Pages
 class PhotoGallery {
     constructor() {
         this.currentView = 'gallery';
@@ -6,6 +6,7 @@ class PhotoGallery {
         this.collections = [];
         this.photos = [];
         this.selectedCollection = null;
+        this.selectedFiles = [];
         
         this.init();
     }
@@ -66,8 +67,52 @@ class PhotoGallery {
         document.getElementById('gallerySection').classList.remove('hidden');
         document.getElementById('adminSection').classList.add('hidden');
         
-        this.loadPhotos();
+        if (this.selectedCollection) {
+            this.showCollectionView();
+        } else {
+            this.showMainGallery();
+        }
+    }
+    
+    showMainGallery() {
+        this.selectedCollection = null;
+        
+        // Reset gallery title
+        const galleryTitle = document.querySelector('#gallerySection .section-title');
+        galleryTitle.textContent = 'Photo Gallery';
+        
+        const gallerySubtitle = document.querySelector('#gallerySection .section-subtitle');
+        gallerySubtitle.textContent = 'Beautiful moments captured and organized';
+        
+        // Show collections grid, hide photos grid
+        document.getElementById('collectionsGrid').classList.remove('hidden');
+        document.getElementById('photosGrid').classList.add('hidden');
+        
         this.loadCollections();
+    }
+    
+    showCollectionView() {
+        const collection = this.collections.find(c => c.id === this.selectedCollection);
+        if (!collection) return;
+        
+        // Update gallery title
+        const galleryTitle = document.querySelector('#gallerySection .section-title');
+        galleryTitle.textContent = collection.name;
+        
+        const gallerySubtitle = document.querySelector('#gallerySection .section-subtitle');
+        gallerySubtitle.innerHTML = `
+            <button class="btn btn-secondary" onclick="photoGallery.showMainGallery()" style="margin-bottom: 16px;">
+                ← Back to Collections
+            </button>
+            <br>
+            ${collection.photo_count} ${collection.photo_count === 1 ? 'photo' : 'photos'} in this collection
+        `;
+        
+        // Hide collections grid, show photos grid
+        document.getElementById('collectionsGrid').classList.add('hidden');
+        document.getElementById('photosGrid').classList.remove('hidden');
+        
+        this.loadPhotos(this.selectedCollection);
     }
     
     showAdminView() {
@@ -206,7 +251,7 @@ class PhotoGallery {
         }
         
         const collectionsHTML = this.collections.map(collection => `
-            <div class="collection-card" onclick="photoGallery.viewCollection(${collection.id})">
+            <div class="collection-card" onclick="photoGallery.viewCollection('${collection.id}')">
                 <h3 class="collection-name">${this.escapeHtml(collection.name)}</h3>
                 <p class="collection-count">
                     <span>📸</span>
@@ -226,10 +271,10 @@ class PhotoGallery {
                         ${collection.photo_count} ${collection.photo_count === 1 ? 'photo' : 'photos'}
                     </p>
                     <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center;">
-                        <button class="btn btn-secondary" onclick="photoGallery.viewCollection(${collection.id})">
+                        <button class="btn btn-secondary" onclick="photoGallery.viewCollection('${collection.id}')">
                             View Photos
                         </button>
-                        <button class="btn btn-danger" onclick="photoGallery.deleteCollection(${collection.id})">
+                        <button class="btn btn-danger" onclick="photoGallery.deleteCollection('${collection.id}')">
                             Delete
                         </button>
                     </div>
@@ -287,7 +332,7 @@ class PhotoGallery {
     }
     
     async deleteCollection(collectionId) {
-        if (!confirm('Are you sure you want to delete this collection? Photos will not be deleted, just unassigned.')) {
+        if (!confirm('Are you sure you want to delete this collection? All photos in this collection will be permanently deleted.')) {
             return;
         }
         
@@ -302,6 +347,11 @@ class PhotoGallery {
                 this.showNotification('Collection deleted successfully!', 'success');
                 this.loadCollections();
                 this.loadPhotos();
+                
+                // If we're viewing the deleted collection, go back to main gallery
+                if (this.selectedCollection === collectionId) {
+                    this.showMainGallery();
+                }
             } else {
                 this.showNotification(data.error || 'Failed to delete collection', 'error');
             }
@@ -311,46 +361,15 @@ class PhotoGallery {
         }
     }
     
-    async viewCollection(collectionId) {
+    viewCollection(collectionId) {
         this.selectedCollection = collectionId;
-        const collection = this.collections.find(c => c.id === collectionId);
         
-        if (collection) {
-            // Update the gallery title
-            const galleryTitle = document.querySelector('#gallerySection .section-title');
-            galleryTitle.textContent = collection.name;
-            
-            // Add back button
-            const gallerySubtitle = document.querySelector('#gallerySection .section-subtitle');
-            gallerySubtitle.innerHTML = `
-                <button class="btn btn-secondary" onclick="photoGallery.showAllPhotos()" style="margin-bottom: 16px;">
-                    ← Back to All Photos
-                </button>
-                <br>
-                ${collection.photo_count} ${collection.photo_count === 1 ? 'photo' : 'photos'} in this collection
-            `;
-            
-            // Load photos for this collection
-            this.loadPhotos(collectionId);
-            
-            // Switch to gallery view if not already there
-            if (this.currentView !== 'gallery') {
-                this.showGalleryView();
-            }
+        if (this.currentView === 'gallery') {
+            this.showCollectionView();
+        } else {
+            // Switch to gallery view and show collection
+            this.showGalleryView();
         }
-    }
-    
-    showAllPhotos() {
-        this.selectedCollection = null;
-        
-        // Reset gallery title
-        const galleryTitle = document.querySelector('#gallerySection .section-title');
-        galleryTitle.textContent = 'Photo Gallery';
-        
-        const gallerySubtitle = document.querySelector('#gallerySection .section-subtitle');
-        gallerySubtitle.textContent = 'Beautiful moments captured and organized';
-        
-        this.loadPhotos();
     }
     
     // Photos Management
@@ -438,7 +457,7 @@ class PhotoGallery {
     }
     
     processFiles(files) {
-        const imageFiles = files.filter(file => file.type.startsWith('image/'));
+        const imageFiles = files.filter(file => file.type.startsWith('image/') || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif'));
         
         if (imageFiles.length === 0) {
             this.showNotification('Please select image files only', 'error');
@@ -510,6 +529,9 @@ class PhotoGallery {
                 this.loadCollections();
             } else {
                 this.showNotification(data.error || 'Upload failed', 'error');
+                if (data.details) {
+                    console.error('Upload details:', data.details);
+                }
             }
         } catch (error) {
             console.error('Upload error:', error);
