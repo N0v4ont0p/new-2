@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: georges-photo-gallery
+    name: photo-gallery
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python src/main.py
@@ -12,10 +12,8 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      - key: ADMIN_PASSWORD
-        value: Hanshow99@
       - key: SECRET_KEY
         generateValue: true
-      - key: FLASK_ENV
-        value: production
+      - key: DATABASE_DIR
+        value: /tmp
 

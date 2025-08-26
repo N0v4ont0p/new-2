@@ -1,4 +1,4 @@
-// Photo Gallery Application - Apple-style JavaScript with Collection Pages
+// Photo Gallery Application - Clean and Functional
 class PhotoGallery {
     constructor() {
         this.currentView = 'gallery';
@@ -23,18 +23,22 @@ class PhotoGallery {
         // Navigation buttons
         document.getElementById('galleryBtn').addEventListener('click', () => this.showGalleryView());
         document.getElementById('adminBtn').addEventListener('click', () => this.showAdminView());
+        document.getElementById('logoutBtn').addEventListener('click', () => this.handleLogout());
         
         // Admin login
         document.getElementById('loginBtn').addEventListener('click', () => this.handleLogin());
-        document.getElementById('logoutBtn').addEventListener('click', () => this.handleLogout());
+        document.getElementById('passwordInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleLogin();
+        });
         
         // Collection management
         document.getElementById('addCollectionBtn').addEventListener('click', () => this.createCollection());
+        document.getElementById('collectionNameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.createCollection();
+        });
         
         // Photo upload
         document.getElementById('uploadBtn').addEventListener('click', () => this.uploadPhotos());
-        
-        // File input
         document.getElementById('fileInput').addEventListener('change', (e) => this.handleFileSelect(e));
         
         // Drag and drop
@@ -46,7 +50,7 @@ class PhotoGallery {
         
         // Modal close
         document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('modal')) {
+            if (e.target.classList.contains('modal') || e.target.classList.contains('modal-close')) {
                 this.closeModal();
             }
         });
@@ -57,91 +61,6 @@ class PhotoGallery {
                 this.closeModal();
             }
         });
-    }
-    
-    // View Management
-    showGalleryView() {
-        this.currentView = 'gallery';
-        this.updateNavigation();
-        
-        document.getElementById('gallerySection').classList.remove('hidden');
-        document.getElementById('adminSection').classList.add('hidden');
-        
-        if (this.selectedCollection) {
-            this.showCollectionView();
-        } else {
-            this.showMainGallery();
-        }
-    }
-    
-    showMainGallery() {
-        this.selectedCollection = null;
-        
-        // Reset gallery title
-        const galleryTitle = document.querySelector('#gallerySection .section-title');
-        galleryTitle.textContent = 'Photo Gallery';
-        
-        const gallerySubtitle = document.querySelector('#gallerySection .section-subtitle');
-        gallerySubtitle.textContent = 'Beautiful moments captured and organized';
-        
-        // Show collections grid, hide photos grid
-        document.getElementById('collectionsGrid').classList.remove('hidden');
-        document.getElementById('photosGrid').classList.add('hidden');
-        
-        this.loadCollections();
-    }
-    
-    showCollectionView() {
-        const collection = this.collections.find(c => c.id === this.selectedCollection);
-        if (!collection) return;
-        
-        // Update gallery title
-        const galleryTitle = document.querySelector('#gallerySection .section-title');
-        galleryTitle.textContent = collection.name;
-        
-        const gallerySubtitle = document.querySelector('#gallerySection .section-subtitle');
-        gallerySubtitle.innerHTML = `
-            <button class="btn btn-secondary" onclick="photoGallery.showMainGallery()" style="margin-bottom: 16px;">
-                ← Back to Collections
-            </button>
-            <br>
-            ${collection.photo_count} ${collection.photo_count === 1 ? 'photo' : 'photos'} in this collection
-        `;
-        
-        // Hide collections grid, show photos grid
-        document.getElementById('collectionsGrid').classList.add('hidden');
-        document.getElementById('photosGrid').classList.remove('hidden');
-        
-        this.loadPhotos(this.selectedCollection);
-    }
-    
-    showAdminView() {
-        if (!this.isLoggedIn) {
-            document.getElementById('loginForm').classList.remove('hidden');
-            document.getElementById('adminPanel').classList.add('hidden');
-        } else {
-            document.getElementById('loginForm').classList.add('hidden');
-            document.getElementById('adminPanel').classList.remove('hidden');
-        }
-        
-        this.currentView = 'admin';
-        this.updateNavigation();
-        
-        document.getElementById('gallerySection').classList.add('hidden');
-        document.getElementById('adminSection').classList.remove('hidden');
-        
-        if (this.isLoggedIn) {
-            this.loadCollections();
-            this.loadPhotos();
-        }
-    }
-    
-    updateNavigation() {
-        const galleryBtn = document.getElementById('galleryBtn');
-        const adminBtn = document.getElementById('adminBtn');
-        
-        galleryBtn.classList.toggle('active', this.currentView === 'gallery');
-        adminBtn.classList.toggle('active', this.currentView === 'admin');
     }
     
     // Authentication
@@ -211,10 +130,98 @@ class PhotoGallery {
                 document.getElementById('adminPanel').classList.add('hidden');
                 document.getElementById('logoutBtn').classList.add('hidden');
                 document.getElementById('passwordInput').value = '';
+                
+                // Switch to gallery view
+                this.showGalleryView();
             }
         } catch (error) {
             console.error('Logout error:', error);
         }
+    }
+    
+    // View Management
+    showGalleryView() {
+        this.currentView = 'gallery';
+        this.updateNavigation();
+        
+        document.getElementById('gallerySection').classList.remove('hidden');
+        document.getElementById('adminSection').classList.add('hidden');
+        
+        if (this.selectedCollection) {
+            this.showCollectionView();
+        } else {
+            this.showMainGallery();
+        }
+    }
+    
+    showMainGallery() {
+        this.selectedCollection = null;
+        
+        // Update gallery title
+        const galleryTitle = document.querySelector('#gallerySection .section-title');
+        galleryTitle.textContent = 'Photo Gallery';
+        
+        const gallerySubtitle = document.querySelector('#gallerySection .section-subtitle');
+        gallerySubtitle.textContent = 'Beautiful moments captured and organized';
+        
+        // Show collections grid, hide photos grid
+        document.getElementById('collectionsGrid').classList.remove('hidden');
+        document.getElementById('photosGrid').classList.add('hidden');
+        
+        this.loadCollections();
+    }
+    
+    showCollectionView() {
+        const collection = this.collections.find(c => c.id === this.selectedCollection);
+        if (!collection) return;
+        
+        // Update gallery title
+        const galleryTitle = document.querySelector('#gallerySection .section-title');
+        galleryTitle.textContent = collection.name;
+        
+        const gallerySubtitle = document.querySelector('#gallerySection .section-subtitle');
+        gallerySubtitle.innerHTML = `
+            <button class="btn btn-secondary" onclick="photoGallery.showMainGallery()" style="margin-bottom: 16px;">
+                ← Back to Collections
+            </button>
+            <br>
+            ${collection.photo_count} ${collection.photo_count === 1 ? 'photo' : 'photos'} in this collection
+        `;
+        
+        // Hide collections grid, show photos grid
+        document.getElementById('collectionsGrid').classList.add('hidden');
+        document.getElementById('photosGrid').classList.remove('hidden');
+        
+        this.loadPhotos(this.selectedCollection);
+    }
+    
+    showAdminView() {
+        if (!this.isLoggedIn) {
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.getElementById('adminPanel').classList.add('hidden');
+        } else {
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('adminPanel').classList.remove('hidden');
+        }
+        
+        this.currentView = 'admin';
+        this.updateNavigation();
+        
+        document.getElementById('gallerySection').classList.add('hidden');
+        document.getElementById('adminSection').classList.remove('hidden');
+        
+        if (this.isLoggedIn) {
+            this.loadCollections();
+            this.loadPhotos();
+        }
+    }
+    
+    updateNavigation() {
+        const galleryBtn = document.getElementById('galleryBtn');
+        const adminBtn = document.getElementById('adminBtn');
+        
+        galleryBtn.classList.toggle('active', this.currentView === 'gallery');
+        adminBtn.classList.toggle('active', this.currentView === 'admin');
     }
     
     // Collections Management
@@ -404,8 +411,8 @@ class PhotoGallery {
         }
         
         const photosHTML = this.photos.map(photo => `
-            <div class="photo-item" onclick="photoGallery.viewPhoto('${photo.cloudinary_url}', '${this.escapeHtml(photo.title)}')">
-                <img src="${photo.cloudinary_url}" alt="${this.escapeHtml(photo.title)}" loading="lazy">
+            <div class="photo-item" onclick="photoGallery.viewPhoto('${photo.cloudinary_secure_url}', '${this.escapeHtml(photo.title)}')">
+                <img src="${photo.cloudinary_secure_url}" alt="${this.escapeHtml(photo.title)}" loading="lazy">
                 <div class="photo-info">
                     <h3 class="photo-title">${this.escapeHtml(photo.title)}</h3>
                     ${photo.description ? `<p class="photo-description">${this.escapeHtml(photo.description)}</p>` : ''}
@@ -457,7 +464,11 @@ class PhotoGallery {
     }
     
     processFiles(files) {
-        const imageFiles = files.filter(file => file.type.startsWith('image/') || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif'));
+        const imageFiles = files.filter(file => 
+            file.type.startsWith('image/') || 
+            file.name.toLowerCase().endsWith('.heic') || 
+            file.name.toLowerCase().endsWith('.heif')
+        );
         
         if (imageFiles.length === 0) {
             this.showNotification('Please select image files only', 'error');
@@ -491,12 +502,6 @@ class PhotoGallery {
             formData.append('files', file);
         });
         
-        // Add metadata
-        this.selectedFiles.forEach(file => {
-            formData.append('titles', file.name.split('.')[0]);
-            formData.append('descriptions', '');
-        });
-        
         if (collectionId) {
             formData.append('collection_id', collectionId);
         }
@@ -505,7 +510,7 @@ class PhotoGallery {
             // Show loading state
             const uploadBtn = document.getElementById('uploadBtn');
             const originalText = uploadBtn.textContent;
-            uploadBtn.innerHTML = '<span class="loading-spinner"></span> Uploading...';
+            uploadBtn.textContent = 'Uploading...';
             uploadBtn.disabled = true;
             
             const response = await fetch('/api/photos', {
@@ -539,7 +544,7 @@ class PhotoGallery {
         } finally {
             // Reset button
             const uploadBtn = document.getElementById('uploadBtn');
-            uploadBtn.textContent = originalText;
+            uploadBtn.textContent = 'Upload Photos';
             uploadBtn.disabled = false;
         }
     }

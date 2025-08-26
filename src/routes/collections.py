@@ -1,12 +1,12 @@
 from flask import Blueprint, request, jsonify
-import re
-from src.models.photo import db, CloudinaryCollectionManager
+from src.models.photo import CloudinaryCollectionManager
+from src.routes.auth import require_admin_auth
 
 collections_bp = Blueprint('collections', __name__)
 
 @collections_bp.route('/collections', methods=['GET'])
 def get_collections():
-    """Get all collections from Cloudinary folders - PERMANENT storage"""
+    """Get all collections from Cloudinary folders"""
     try:
         collections = CloudinaryCollectionManager.get_all_collections()
         return jsonify({
@@ -21,8 +21,9 @@ def get_collections():
         }), 500
 
 @collections_bp.route('/collections', methods=['POST'])
+@require_admin_auth
 def create_collection():
-    """Create a new collection using Cloudinary folders - PERMANENT storage"""
+    """Create a new collection"""
     try:
         data = request.get_json()
         if not data:
@@ -30,29 +31,28 @@ def create_collection():
                 'success': False,
                 'error': 'No data provided'
             }), 400
-            
-        name = data.get('name', '').strip()
         
+        name = data.get('name', '').strip()
         if not name:
             return jsonify({
                 'success': False,
                 'error': 'Collection name is required'
             }), 400
         
-        if len(name) > 100:
-            return jsonify({
-                'success': False,
-                'error': 'Collection name is too long (max 100 characters)'
-            }), 400
+        # Check if collection already exists
+        existing_collections = CloudinaryCollectionManager.get_all_collections()
+        folder_name = name.lower().replace(' ', '_').replace('-', '_')
+        folder_name = ''.join(c for c in folder_name if c.isalnum() or c == '_')
         
-        # Create collection using Cloudinary folders
-        collection, error = CloudinaryCollectionManager.create_collection(name)
+        for collection in existing_collections:
+            if collection['id'] == folder_name:
+                return jsonify({
+                    'success': False,
+                    'error': 'Collection already exists'
+                }), 400
         
-        if error:
-            return jsonify({
-                'success': False,
-                'error': error
-            }), 409 if 'already exists' in error else 400
+        # Create collection
+        collection = CloudinaryCollectionManager.create_collection(name)
         
         return jsonify({
             'success': True,
@@ -64,77 +64,60 @@ def create_collection():
         print(f"Error creating collection: {str(e)}")
         return jsonify({
             'success': False,
-            'error': 'Failed to create collection'
+            'error': f'Failed to create collection: {str(e)}'
         }), 500
 
 @collections_bp.route('/collections/<collection_id>', methods=['DELETE'])
+@require_admin_auth
 def delete_collection(collection_id):
-    """Delete a collection and all its photos from Cloudinary - PERMANENT deletion"""
+    """Delete a collection and all its photos"""
     try:
-        success, message = CloudinaryCollectionManager.delete_collection(collection_id)
-        
-        if success:
-            return jsonify({
-                'success': True,
-                'message': message
-            })
-        else:
+        # Check if collection exists
+        collection = CloudinaryCollectionManager.get_collection_by_id(collection_id)
+        if not collection:
             return jsonify({
                 'success': False,
-                'error': message
-            }), 500
+                'error': 'Collection not found'
+            }), 404
+        
+        # Delete collection
+        CloudinaryCollectionManager.delete_collection(collection_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Collection deleted successfully'
+        })
         
     except Exception as e:
         print(f"Error deleting collection: {str(e)}")
         return jsonify({
             'success': False,
-            'error': 'Failed to delete collection'
+            'error': f'Failed to delete collection: {str(e)}'
         }), 500
 
-@collections_bp.route('/collections/<collection_id>/photos', methods=['GET'])
-def get_collection_photos(collection_id):
-    """Get all photos in a specific collection - PERMANENT storage"""
+@collections_bp.route('/collections/<collection_id>', methods=['GET'])
+def get_collection(collection_id):
+    """Get collection details and photos"""
     try:
-        photos = CloudinaryCollectionManager.get_collection_photos(collection_id)
         collection = CloudinaryCollectionManager.get_collection_by_id(collection_id)
+        if not collection:
+            return jsonify({
+                'success': False,
+                'error': 'Collection not found'
+            }), 404
+        
+        photos = CloudinaryCollectionManager.get_collection_photos(collection_id)
+        collection['photos'] = photos
         
         return jsonify({
             'success': True,
-            'photos': photos,
             'collection': collection
         })
         
     except Exception as e:
-        print(f"Error getting collection photos: {str(e)}")
+        print(f"Error getting collection: {str(e)}")
         return jsonify({
             'success': False,
-            'error': 'Failed to fetch collection photos'
-        }), 500
-
-@collections_bp.route('/collections/<collection_id>', methods=['PUT'])
-def update_collection(collection_id):
-    """Update collection name - PERMANENT storage"""
-    try:
-        data = request.get_json()
-        new_name = data.get('name', '').strip()
-        
-        if not new_name:
-            return jsonify({
-                'success': False,
-                'error': 'Collection name is required'
-            }), 400
-        
-        # For now, we don't support renaming Cloudinary folders
-        # This would require moving all photos to a new folder
-        return jsonify({
-            'success': False,
-            'error': 'Collection renaming is not supported yet'
-        }), 400
-        
-    except Exception as e:
-        print(f"Error updating collection: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to update collection'
+            'error': 'Failed to fetch collection'
         }), 500
 

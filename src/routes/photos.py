@@ -4,6 +4,7 @@ import cloudinary
 import cloudinary.uploader
 import os
 from src.models.photo import db, Photo, CloudinaryCollectionManager
+from src.routes.auth import require_admin_auth
 from PIL import Image
 import io
 import tempfile
@@ -13,7 +14,7 @@ photos_bp = Blueprint('photos', __name__)
 # Supported file extensions including HEIC
 ALLOWED_EXTENSIONS = {
     'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff', 'tif',
-    'heic', 'heif', 'avif', 'svg'
+    'heic', 'heif', 'avif'
 }
 
 def allowed_file(filename):
@@ -24,8 +25,6 @@ def allowed_file(filename):
 def convert_heic_to_jpg(file_content):
     """Convert HEIC file to JPG format"""
     try:
-        # Try to use PIL to convert HEIC
-        from PIL import Image
         from pillow_heif import register_heif_opener
         
         # Register HEIF opener with PIL
@@ -55,7 +54,7 @@ def convert_heic_to_jpg(file_content):
 
 @photos_bp.route('/photos', methods=['GET'])
 def get_photos():
-    """Get all photos or photos from a specific collection - PERMANENT storage"""
+    """Get all photos or photos from a specific collection"""
     try:
         collection_id = request.args.get('collection_id')
         
@@ -80,6 +79,7 @@ def get_photos():
         }), 500
 
 @photos_bp.route('/photos', methods=['POST'])
+@require_admin_auth
 def upload_photos():
     """Upload photos with HEIC support and permanent Cloudinary storage"""
     try:
@@ -97,9 +97,7 @@ def upload_photos():
                 'error': 'No files selected'
             }), 400
         
-        # Get metadata
-        titles = request.form.getlist('titles')
-        descriptions = request.form.getlist('descriptions')
+        # Get collection ID
         collection_id = request.form.get('collection_id')
         
         # Validate collection if provided
@@ -153,7 +151,6 @@ def upload_photos():
                     'resource_type': 'image',
                     'quality': 'auto:good',
                     'fetch_format': 'auto',
-                    'flags': 'progressive',
                     'overwrite': False
                 }
                 
@@ -162,6 +159,7 @@ def upload_photos():
                     upload_params['folder'] = collection_id
                     upload_params['public_id'] = f"{collection_id}/{original_filename.rsplit('.', 1)[0]}_{i}"
                 else:
+                    upload_params['folder'] = 'uncategorized'
                     upload_params['public_id'] = f"uncategorized/{original_filename.rsplit('.', 1)[0]}_{i}"
                 
                 # Upload to Cloudinary
@@ -177,18 +175,17 @@ def upload_photos():
                     # Clean up temp file
                     os.unlink(temp_file.name)
                 
-                # Get title and description
-                title = titles[i] if i < len(titles) and titles[i] else original_filename.rsplit('.', 1)[0]
-                description = descriptions[i] if i < len(descriptions) and descriptions[i] else ''
+                # Get title
+                title = original_filename.rsplit('.', 1)[0] if original_filename else f"Photo {i+1}"
                 
                 # Save to database
                 photo = Photo(
                     title=title,
-                    description=description,
+                    description='',
                     cloudinary_public_id=result['public_id'],
                     cloudinary_url=result['url'],
                     cloudinary_secure_url=result['secure_url'],
-                    cloudinary_folder=collection_id if collection_id else None,
+                    cloudinary_folder=collection_id if collection_id else 'uncategorized',
                     original_filename=original_filename,
                     file_format=result.get('format', file_extension),
                     file_size=result.get('bytes', len(file_content)),
@@ -242,8 +239,9 @@ def upload_photos():
         }), 500
 
 @photos_bp.route('/photos/<int:photo_id>', methods=['DELETE'])
+@require_admin_auth
 def delete_photo(photo_id):
-    """Delete a photo from both Cloudinary and database - PERMANENT deletion"""
+    """Delete a photo from both Cloudinary and database"""
     try:
         photo = Photo.query.get(photo_id)
         if not photo:
@@ -274,45 +272,5 @@ def delete_photo(photo_id):
         return jsonify({
             'success': False,
             'error': 'Failed to delete photo'
-        }), 500
-
-@photos_bp.route('/photos/<int:photo_id>', methods=['PUT'])
-def update_photo(photo_id):
-    """Update photo metadata"""
-    try:
-        photo = Photo.query.get(photo_id)
-        if not photo:
-            return jsonify({
-                'success': False,
-                'error': 'Photo not found'
-            }), 404
-        
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'success': False,
-                'error': 'No data provided'
-            }), 400
-        
-        # Update fields
-        if 'title' in data:
-            photo.title = data['title']
-        if 'description' in data:
-            photo.description = data['description']
-        
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Photo updated successfully',
-            'photo': photo.to_dict()
-        })
-        
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error updating photo: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to update photo'
         }), 500
 

@@ -1,30 +1,29 @@
-import os
 from flask import Blueprint, request, jsonify, session
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+import os
 
 auth_bp = Blueprint('auth', __name__)
 
+# Admin password (hardcoded as requested)
+ADMIN_PASSWORD = "Hanshow99@"
+
 @auth_bp.route('/auth/login', methods=['POST'])
 def login():
-    """Admin login endpoint"""
+    """Admin login endpoint with cookie-based sessions"""
     try:
         data = request.get_json()
-        password = data.get('password', '')
-        
-        # Get admin password from environment variable (no default hardcoded password)
-        admin_password = os.getenv('ADMIN_PASSWORD')
-        
-        if not admin_password:
+        if not data:
             return jsonify({
                 'success': False,
-                'error': 'Admin password not configured. Please set ADMIN_PASSWORD environment variable.'
-            }), 500
+                'error': 'No data provided'
+            }), 400
         
-        if password == admin_password:
+        password = data.get('password', '')
+        
+        if password == ADMIN_PASSWORD:
+            # Set permanent session (30 days)
+            session.permanent = True
             session['admin_logged_in'] = True
+            
             return jsonify({
                 'success': True,
                 'message': 'Login successful'
@@ -36,9 +35,10 @@ def login():
             }), 401
             
     except Exception as e:
+        print(f"Login error: {str(e)}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Login failed'
         }), 500
 
 @auth_bp.route('/auth/logout', methods=['POST'])
@@ -46,29 +46,33 @@ def logout():
     """Admin logout endpoint"""
     try:
         session.pop('admin_logged_in', None)
+        session.permanent = False
+        
         return jsonify({
             'success': True,
             'message': 'Logout successful'
         })
     except Exception as e:
+        print(f"Logout error: {str(e)}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Logout failed'
         }), 500
 
 @auth_bp.route('/auth/status', methods=['GET'])
-def auth_status():
-    """Check if admin is logged in"""
+def status():
+    """Check authentication status"""
     try:
-        is_logged_in = session.get('admin_logged_in', False)
+        authenticated = session.get('admin_logged_in', False)
         return jsonify({
             'success': True,
-            'authenticated': is_logged_in
+            'authenticated': authenticated
         })
     except Exception as e:
+        print(f"Auth status error: {str(e)}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'authenticated': False
         }), 500
 
 def require_admin_auth(f):
@@ -84,3 +88,4 @@ def require_admin_auth(f):
             }), 401
         return f(*args, **kwargs)
     return decorated_function
+

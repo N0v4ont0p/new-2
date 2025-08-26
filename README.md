@@ -1,35 +1,32 @@
-# 📸 Premium Photo Gallery
+# 📸 Photo Gallery
 
-A beautiful, Apple-inspired photo gallery with permanent cloud storage, collection management, and admin panel.
+A clean, Apple-inspired photo gallery with permanent cloud storage and admin panel.
 
 ## ✨ Features
 
 ### 🎨 Beautiful Gallery
-- Modern, responsive Apple-style design
-- Smooth animations and hover effects
-- Mobile-friendly layout
-- Professional photography showcase
-- Enhanced glassmorphism and frosted glass effects
+- Clean Apple-style design with minimal animations
+- Responsive layout for all devices
+- Professional photo showcase
+- Collection-based organization
 
 ### 🔐 Secure Admin Panel
-- Password-protected admin access (configurable)
+- Cookie-based authentication (remembers login)
+- Password-protected admin access
 - Drag & drop photo upload with HEIC support
-- Easy photo management (delete/edit)
+- Collection management
 - Batch upload support (up to 10 files)
-- Collection creation and management
 
 ### ☁️ PERMANENT STORAGE
 - **Cloudinary integration** for permanent photo storage
 - **Photos NEVER disappear** (even after server restarts)
-- **Collections stored as Cloudinary folders** - truly permanent
+- **Collections stored as Cloudinary folders**
 - Global CDN for fast loading worldwide
 - 25GB free storage (thousands of photos)
-- Automatic fallback if cloud storage fails
 
 ### 📱 File Format Support
 - **HEIC/HEIF support** - iPhone photos work perfectly
-- JPG, JPEG, PNG, GIF, WebP, BMP, TIFF
-- AVIF, SVG support
+- JPG, JPEG, PNG, GIF, WebP, BMP, TIFF, AVIF
 - Automatic HEIC to JPG conversion
 - 10MB file size limit per photo
 
@@ -40,16 +37,13 @@ A beautiful, Apple-inspired photo gallery with permanent cloud storage, collecti
 - Cloudinary account (free tier available)
 
 ### Environment Variables
-Create a `.env` file with:
+Set these in your deployment environment:
 
 ```env
 # Cloudinary Configuration (Required)
 CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
 CLOUDINARY_API_KEY=your_cloudinary_api_key
 CLOUDINARY_API_SECRET=your_cloudinary_api_secret
-
-# Admin Configuration (Required)
-ADMIN_PASSWORD=your_custom_admin_password
 
 # Flask Configuration (Optional)
 SECRET_KEY=your_secret_key_for_sessions
@@ -58,27 +52,24 @@ DATABASE_DIR=/tmp
 
 ### Local Development
 
-1. **Clone and setup:**
+1. **Setup:**
 ```bash
-cd photo-gallery
-python -m venv venv
+cd photo-gallery-v2
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 2. **Configure environment:**
-   - Copy `.env.example` to `.env`
-   - Add your Cloudinary credentials
-   - Set your custom admin password
+   - Add your Cloudinary credentials to `.env`
 
-3. **Run the application:**
+3. **Run:**
 ```bash
 python src/main.py
 ```
 
-4. **Access the gallery:**
+4. **Access:**
    - Open http://localhost:5000
-   - Click "Admin" and login with your password
+   - Click "Admin" to access admin panel
 
 ## 🌐 Deployment on Render.com
 
@@ -104,7 +95,6 @@ In Render dashboard, add these environment variables:
 | `CLOUDINARY_CLOUD_NAME` | Your Cloudinary cloud name | ✅ |
 | `CLOUDINARY_API_KEY` | Your Cloudinary API key | ✅ |
 | `CLOUDINARY_API_SECRET` | Your Cloudinary API secret | ✅ |
-| `ADMIN_PASSWORD` | Your custom admin password | ✅ |
 | `SECRET_KEY` | Random secret for sessions | ⚠️ |
 
 ### Step 5: Deploy
@@ -119,10 +109,10 @@ In Render dashboard, add these environment variables:
 2. Get your credentials from the dashboard
 3. Add them to your environment variables
 
-### Admin Password
-- Set `ADMIN_PASSWORD` environment variable
-- Use a strong, unique password
-- This password protects your admin panel
+### Admin Access
+- Admin authentication is cookie-based
+- Login persists for 30 days
+- Secure session management
 
 ### File Upload Limits
 - Maximum 10 files per upload
@@ -132,7 +122,7 @@ In Render dashboard, add these environment variables:
 ## 📁 Project Structure
 
 ```
-photo-gallery/
+photo-gallery-v2/
 ├── src/
 │   ├── main.py              # Flask application entry point
 │   ├── models/
@@ -143,7 +133,7 @@ photo-gallery/
 │   │   └── collections.py   # Collection management routes
 │   └── static/
 │       ├── index.html       # Main HTML template
-│       ├── styles.css       # Apple-inspired CSS with glassmorphism
+│       ├── styles.css       # Clean Apple-inspired CSS
 │       └── script.js        # JavaScript functionality
 ├── requirements.txt         # Python dependencies
 ├── render.yaml             # Render.com configuration
@@ -153,16 +143,10 @@ photo-gallery/
 ## 🎨 Design Features
 
 ### Apple-Inspired Aesthetics
-- Clean white backgrounds with subtle gradients
-- SF Pro Display typography hierarchy
-- Precise spacing using 8pt grid system
+- Clean white backgrounds
 - Subtle shadows and rounded corners
-
-### Enhanced Glassmorphism
-- Frosted glass navigation bar
-- Translucent cards and modals
-- Backdrop blur effects
-- Smooth animations and transitions
+- Professional typography hierarchy
+- Minimal animations (only on hover)
 
 ### Responsive Design
 - Mobile-first approach
@@ -171,8 +155,7 @@ photo-gallery/
 
 ## 🔒 Security Features
 
-- Environment variable-based configuration
-- Session-based authentication
+- Cookie-based session management
 - Secure file upload validation
 - CORS protection
 - Input sanitization
@@ -182,14 +165,13 @@ photo-gallery/
 - Cloudinary CDN for global fast loading
 - Lazy loading for images
 - Optimized image delivery
-- Progressive web app features
+- Clean, efficient code
 
 ## 📱 Mobile Support
 
 - Touch-friendly interface
 - Responsive grid layouts
 - Mobile-optimized upload experience
-- Swipe gestures for navigation
 
 ## 🛠️ Troubleshooting
 
@@ -205,10 +187,10 @@ photo-gallery/
 - Check browser console for errors
 - Refresh the page
 
-**Admin login fails:**
-- Verify `ADMIN_PASSWORD` environment variable
-- Check for typos in password
-- Clear browser cache
+**Admin login issues:**
+- Clear browser cache and cookies
+- Check for JavaScript errors
+- Verify admin password
 
 ### Getting Help
 
@@ -220,10 +202,6 @@ photo-gallery/
 ## 📄 License
 
 This project is open source and available under the MIT License.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 

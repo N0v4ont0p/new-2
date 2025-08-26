@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Photo Gallery - Premium Collection</title>
+    <title>Photo Gallery</title>
     <link rel="stylesheet" href="styles.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📸</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body>
     <!-- Header -->
@@ -13,7 +15,7 @@
         <div class="header-content">
             <div class="logo">
                 <span class="logo-icon">📸</span>
-                <h1>Gallery</h1>
+                <h1>Photo Gallery</h1>
             </div>
             <nav class="nav-buttons">
                 <button id="galleryBtn" class="nav-btn active">Gallery</button>
@@ -23,19 +25,22 @@
         </div>
     </header>
 
-    <main class="container">
+    <!-- Main Container -->
+    <div class="container">
         <!-- Gallery Section -->
         <section id="gallerySection" class="section">
-            <h2 class="section-title">Photo Gallery</h2>
-            <p class="section-subtitle">Beautiful moments captured and organized</p>
-            
+            <div class="section-header">
+                <h2 class="section-title">Photo Gallery</h2>
+                <p class="section-subtitle">Beautiful moments captured and organized</p>
+            </div>
+
             <!-- Collections Grid -->
             <div id="collectionsGrid" class="collection-grid">
                 <!-- Collections will be loaded here -->
             </div>
-            
+
             <!-- Photos Grid -->
-            <div id="photosGrid" class="photo-grid">
+            <div id="photosGrid" class="photo-grid hidden">
                 <!-- Photos will be loaded here -->
             </div>
         </section>
@@ -43,77 +48,78 @@
         <!-- Admin Section -->
         <section id="adminSection" class="section hidden">
             <!-- Login Form -->
-            <div id="loginForm" class="admin-section">
-                <h2 class="admin-title">
-                    <span>🔐</span>
-                    Admin Access
-                </h2>
-                <div class="form-group">
-                    <label for="passwordInput" class="form-label">Password</label>
-                    <input type="password" id="passwordInput" class="form-input" placeholder="Enter admin password">
+            <div id="loginForm" class="admin-login">
+                <div class="login-card">
+                    <h2 class="login-title">Admin Login</h2>
+                    <div class="form-group">
+                        <input type="password" id="passwordInput" class="form-input" placeholder="Enter admin password" autocomplete="current-password">
+                    </div>
+                    <button id="loginBtn" class="btn btn-primary">Login</button>
                 </div>
-                <button id="loginBtn" class="btn btn-primary">Login</button>
             </div>
 
             <!-- Admin Panel -->
-            <div id="adminPanel" class="hidden">
-                <!-- Upload Section -->
-                <div class="admin-section">
-                    <h3 class="admin-title">
-                        <span>📤</span>
-                        Upload Photos
-                    </h3>
-                    
-                    <div id="uploadArea" class="upload-area">
-                        <div class="upload-icon">📷</div>
-                        <h4 class="upload-text">Drag and drop photos here</h4>
-                        <p class="upload-subtext">or click to browse files</p>
-                        <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="collectionSelect" class="form-label">Assign to Collection (Optional)</label>
-                        <select id="collectionSelect" class="form-select">
-                            <option value="">No Collection</option>
-                        </select>
-                    </div>
-                    
-                    <button id="uploadBtn" class="btn btn-primary">Upload Photos</button>
+            <div id="adminPanel" class="admin-panel hidden">
+                <div class="section-header">
+                    <h2 class="section-title">Admin Panel</h2>
+                    <p class="section-subtitle">Manage your photo collections and uploads</p>
                 </div>
 
                 <!-- Collection Management -->
                 <div class="admin-section">
                     <h3 class="admin-title">
                         <span>📁</span>
-                        Manage Collections
+                        Collection Management
                     </h3>
-                    
-                    <div class="form-group">
-                        <label for="collectionNameInput" class="form-label">New Collection Name</label>
+                    <div class="form-row">
                         <input type="text" id="collectionNameInput" class="form-input" placeholder="Enter collection name">
+                        <button id="addCollectionBtn" class="btn btn-primary">Add Collection</button>
                     </div>
-                    
-                    <button id="addCollectionBtn" class="btn btn-primary">Create Collection</button>
-                    
-                    <!-- Admin Collections Grid -->
-                    <div id="adminCollectionsGrid" class="collection-grid" style="margin-top: 32px;">
+                    <div id="adminCollectionsGrid" class="collection-grid">
                         <!-- Admin collections will be loaded here -->
                     </div>
                 </div>
+
+                <!-- Photo Upload -->
+                <div class="admin-section">
+                    <h3 class="admin-title">
+                        <span>📤</span>
+                        Photo Upload
+                    </h3>
+                    <div class="form-group">
+                        <label class="form-label">Select Collection (Optional)</label>
+                        <select id="collectionSelect" class="form-select">
+                            <option value="">No Collection</option>
+                        </select>
+                    </div>
+                    <div id="uploadArea" class="upload-area">
+                        <div class="upload-icon">📷</div>
+                        <div class="upload-text">Drag and drop photos here</div>
+                        <div class="upload-subtext">or click to select files</div>
+                        <div class="upload-formats">Supports: JPG, PNG, GIF, WebP, HEIC, and more</div>
+                    </div>
+                    <input type="file" id="fileInput" multiple accept="image/*,.heic,.heif" class="hidden">
+                    <button id="uploadBtn" class="btn btn-primary">Upload Photos</button>
+                </div>
             </div>
         </section>
-    </main>
+    </div>
 
     <!-- Photo Modal -->
     <div id="photoModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="modalTitle" class="modal-title">Photo</h3>
-                <button class="modal-close" onclick="photoGallery.closeModal()">×</button>
+                <button class="modal-close">&times;</button>
             </div>
-            <img id="modalImage" src="" alt="" style="width: 100%; height: auto; border-radius: 12px;">
+            <div class="modal-body">
+                <img id="modalImage" src="" alt="Photo">
+            </div>
         </div>
     </div>
+
+    <!-- Notification Container -->
+    <div id="notificationContainer" class="notification-container"></div>
 
     <script src="script.js"></script>
 </body>
