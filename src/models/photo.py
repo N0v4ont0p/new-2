@@ -56,6 +56,70 @@ class CloudinaryCollectionManager:
     """Manages collections using Cloudinary folders"""
     
     @staticmethod
+    def sync_photos_from_cloudinary():
+        """Sync all photos from Cloudinary to database on startup"""
+        try:
+            print("Syncing photos from Cloudinary...")
+            
+            # Get all resources from Cloudinary
+            result = cloudinary.api.resources(
+                type='upload',
+                max_results=500,  # Adjust as needed
+                resource_type='image'
+            )
+            
+            synced_count = 0
+            
+            for resource in result.get('resources', []):
+                public_id = resource['public_id']
+                
+                # Skip placeholder files
+                if '.placeholder' in public_id:
+                    continue
+                
+                # Check if photo already exists in database
+                existing_photo = Photo.query.filter_by(cloudinary_public_id=public_id).first()
+                
+                if not existing_photo:
+                    # Extract folder name (collection)
+                    folder_name = None
+                    if '/' in public_id:
+                        folder_name = public_id.split('/')[0]
+                    
+                    # Create title from public_id
+                    title = public_id.split('/')[-1] if '/' in public_id else public_id
+                    title = title.replace('_', ' ').title()
+                    
+                    # Create new photo record
+                    photo = Photo(
+                        title=title,
+                        description='',
+                        cloudinary_public_id=public_id,
+                        cloudinary_url=resource['url'],
+                        cloudinary_secure_url=resource['secure_url'],
+                        cloudinary_folder=folder_name,
+                        original_filename=resource.get('original_filename', title),
+                        file_format=resource.get('format', 'jpg'),
+                        file_size=resource.get('bytes', 0),
+                        width=resource.get('width', 0),
+                        height=resource.get('height', 0),
+                        uploaded_at=datetime.utcnow()
+                    )
+                    
+                    db.session.add(photo)
+                    synced_count += 1
+            
+            if synced_count > 0:
+                db.session.commit()
+                print(f"Synced {synced_count} photos from Cloudinary")
+            else:
+                print("No new photos to sync")
+                
+        except Exception as e:
+            print(f"Error syncing photos from Cloudinary: {str(e)}")
+            db.session.rollback()
+    
+    @staticmethod
     def get_all_collections():
         """Get all collections from Cloudinary folders"""
         try:

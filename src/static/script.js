@@ -244,7 +244,20 @@ class PhotoGallery {
         const galleryGrid = document.getElementById('collectionsGrid');
         const adminGrid = document.getElementById('adminCollectionsGrid');
         
-        if (this.collections.length === 0) {
+        // Add uncategorized collection
+        const uncategorizedPhotos = this.photos.filter(photo => !photo.cloudinary_folder || photo.cloudinary_folder === 'uncategorized');
+        const collectionsWithUncategorized = [...this.collections];
+        
+        if (uncategorizedPhotos.length > 0) {
+            collectionsWithUncategorized.unshift({
+                id: 'uncategorized',
+                name: 'Uncategorized',
+                photo_count: uncategorizedPhotos.length,
+                created_at: new Date().toISOString()
+            });
+        }
+        
+        if (collectionsWithUncategorized.length === 0) {
             const emptyState = `
                 <div class="empty-state">
                     <div class="empty-state-icon">📁</div>
@@ -257,7 +270,7 @@ class PhotoGallery {
             return;
         }
         
-        const collectionsHTML = this.collections.map(collection => `
+        const collectionsHTML = collectionsWithUncategorized.map(collection => `
             <div class="collection-card" onclick="photoGallery.viewCollection('${collection.id}')">
                 <h3 class="collection-name">${this.escapeHtml(collection.name)}</h3>
                 <p class="collection-count">
@@ -270,23 +283,42 @@ class PhotoGallery {
         galleryGrid.innerHTML = collectionsHTML;
         
         if (adminGrid) {
-            const adminCollectionsHTML = this.collections.map(collection => `
-                <div class="collection-card">
-                    <h3 class="collection-name">${this.escapeHtml(collection.name)}</h3>
-                    <p class="collection-count">
-                        <span>📸</span>
-                        ${collection.photo_count} ${collection.photo_count === 1 ? 'photo' : 'photos'}
-                    </p>
-                    <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center;">
-                        <button class="btn btn-secondary" onclick="photoGallery.viewCollection('${collection.id}')">
-                            View Photos
-                        </button>
-                        <button class="btn btn-danger" onclick="photoGallery.deleteCollection('${collection.id}')">
-                            Delete
-                        </button>
-                    </div>
-                </div>
-            `).join('');
+            const adminCollectionsHTML = collectionsWithUncategorized.map(collection => {
+                if (collection.id === 'uncategorized') {
+                    return `
+                        <div class="collection-card">
+                            <h3 class="collection-name">${this.escapeHtml(collection.name)}</h3>
+                            <p class="collection-count">
+                                <span>📸</span>
+                                ${collection.photo_count} ${collection.photo_count === 1 ? 'photo' : 'photos'}
+                            </p>
+                            <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center;">
+                                <button class="btn btn-secondary" onclick="photoGallery.viewCollection('${collection.id}')">
+                                    View Photos
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="collection-card">
+                            <h3 class="collection-name">${this.escapeHtml(collection.name)}</h3>
+                            <p class="collection-count">
+                                <span>📸</span>
+                                ${collection.photo_count} ${collection.photo_count === 1 ? 'photo' : 'photos'}
+                            </p>
+                            <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center;">
+                                <button class="btn btn-secondary" onclick="photoGallery.viewCollection('${collection.id}')">
+                                    View Photos
+                                </button>
+                                <button class="btn btn-danger" onclick="photoGallery.deleteCollection('${collection.id}')">
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+            }).join('');
             
             adminGrid.innerHTML = adminCollectionsHTML;
         }
@@ -382,12 +414,24 @@ class PhotoGallery {
     // Photos Management
     async loadPhotos(collectionId = null) {
         try {
-            const url = collectionId ? `/api/photos?collection_id=${collectionId}` : '/api/photos';
+            let url = '/api/photos';
+            if (collectionId && collectionId !== 'uncategorized') {
+                url = `/api/photos?collection_id=${collectionId}`;
+            } else if (collectionId === 'uncategorized') {
+                // Load all photos and filter uncategorized on frontend
+                url = '/api/photos';
+            }
+            
             const response = await fetch(url);
             const data = await response.json();
             
             if (data.success) {
-                this.photos = data.photos;
+                if (collectionId === 'uncategorized') {
+                    // Filter uncategorized photos
+                    this.photos = data.photos.filter(photo => !photo.cloudinary_folder || photo.cloudinary_folder === 'uncategorized');
+                } else {
+                    this.photos = data.photos;
+                }
                 this.renderPhotos();
             }
         } catch (error) {
@@ -411,12 +455,8 @@ class PhotoGallery {
         }
         
         const photosHTML = this.photos.map(photo => `
-            <div class="photo-item" onclick="photoGallery.viewPhoto('${photo.cloudinary_secure_url}', '${this.escapeHtml(photo.title)}')">
-                <img src="${photo.cloudinary_secure_url}" alt="${this.escapeHtml(photo.title)}" loading="lazy">
-                <div class="photo-info">
-                    <h3 class="photo-title">${this.escapeHtml(photo.title)}</h3>
-                    ${photo.description ? `<p class="photo-description">${this.escapeHtml(photo.description)}</p>` : ''}
-                </div>
+            <div class="photo-item" onclick="photoGallery.viewPhoto('${photo.cloudinary_secure_url}', 'Photo')">
+                <img src="${photo.cloudinary_secure_url}" alt="Photo" loading="lazy">
             </div>
         `).join('');
         

@@ -40,6 +40,9 @@ app.register_blueprint(collections_bp, url_prefix='/api')
 db.init_app(app)
 with app.app_context():
     db.create_all()
+    # Sync photos from Cloudinary on startup to restore after server restarts
+    from src.models.photo import CloudinaryCollectionManager
+    CloudinaryCollectionManager.sync_photos_from_cloudinary()
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
