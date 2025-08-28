@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Photo Gallery</title>
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
-    <link rel="apple-touch-icon" href="favicon.ico">
-    <link rel="shortcut icon" href="favicon.ico">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" href="/favicon.ico">
+    <link rel="shortcut icon" href="/favicon.ico">
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -40,6 +40,17 @@
             <!-- Collections Grid -->
             <div id="collectionsGrid" class="collection-grid">
                 <!-- Collections will be loaded here -->
+            </div>
+
+            <!-- Uncategorized Photos Section -->
+            <div id="uncategorizedSection" class="uncategorized-section hidden">
+                <div class="section-divider">
+                    <h3 class="uncategorized-title">Uncategorized Photos</h3>
+                    <p class="uncategorized-subtitle">Photos not assigned to any collection</p>
+                </div>
+                <div id="uncategorizedGrid" class="photo-grid">
+                    <!-- Uncategorized photos will be loaded here -->
+                </div>
             </div>
 
             <!-- Photos Grid -->
@@ -117,6 +128,25 @@
             </div>
             <div class="modal-body">
                 <img id="modalImage" src="" alt="Photo">
+                <div class="modal-actions">
+                    <button id="downloadBtn" class="btn btn-primary">
+                        <span>⬇️</span>
+                        Download
+                    </button>
+                    <div id="adminPhotoActions" class="admin-photo-actions hidden">
+                        <select id="moveToCollectionSelect" class="form-select">
+                            <option value="">Move to Collection...</option>
+                        </select>
+                        <button id="uncategorizeBtn" class="btn btn-secondary">
+                            <span>📁</span>
+                            Uncategorize
+                        </button>
+                        <button id="deletePhotoBtn" class="btn btn-danger">
+                            <span>🗑️</span>
+                            Delete
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

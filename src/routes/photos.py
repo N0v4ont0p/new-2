@@ -274,3 +274,134 @@ def delete_photo(photo_id):
             'error': 'Failed to delete photo'
         }), 500
 
+@photos_bp.route('/photos/<int:photo_id>/move', methods=['POST'])
+@require_admin_auth
+def move_photo_to_collection(photo_id):
+    """Move a photo to a different collection"""
+    try:
+        photo = Photo.query.get(photo_id)
+        if not photo:
+            return jsonify({
+                'success': False,
+                'error': 'Photo not found'
+            }), 404
+        
+        data = request.get_json()
+        new_collection_id = data.get('collection_id')
+        
+        if not new_collection_id:
+            return jsonify({
+                'success': False,
+                'error': 'Collection ID is required'
+            }), 400
+        
+        # Validate collection exists
+        collection = CloudinaryCollectionManager.get_collection_by_id(new_collection_id)
+        if not collection:
+            return jsonify({
+                'success': False,
+                'error': 'Collection not found'
+            }), 404
+        
+        # Update Cloudinary public_id (move to new folder)
+        old_public_id = photo.cloudinary_public_id
+        filename = old_public_id.split('/')[-1] if '/' in old_public_id else old_public_id
+        new_public_id = f"{new_collection_id}/{filename}"
+        
+        try:
+            # Copy to new location
+            result = cloudinary.uploader.upload(
+                photo.cloudinary_secure_url,
+                public_id=new_public_id,
+                folder=new_collection_id,
+                resource_type='image'
+            )
+            
+            # Delete old location
+            cloudinary.uploader.destroy(old_public_id)
+            
+            # Update database
+            photo.cloudinary_public_id = result['public_id']
+            photo.cloudinary_url = result['url']
+            photo.cloudinary_secure_url = result['secure_url']
+            photo.cloudinary_folder = new_collection_id
+            
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Photo moved successfully'
+            })
+            
+        except Exception as e:
+            print(f"Error moving photo in Cloudinary: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': 'Failed to move photo in cloud storage'
+            }), 500
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error moving photo: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to move photo'
+        }), 500
+
+@photos_bp.route('/photos/<int:photo_id>/uncategorize', methods=['POST'])
+@require_admin_auth
+def uncategorize_photo(photo_id):
+    """Move a photo to uncategorized"""
+    try:
+        photo = Photo.query.get(photo_id)
+        if not photo:
+            return jsonify({
+                'success': False,
+                'error': 'Photo not found'
+            }), 404
+        
+        # Update Cloudinary public_id (move to uncategorized folder)
+        old_public_id = photo.cloudinary_public_id
+        filename = old_public_id.split('/')[-1] if '/' in old_public_id else old_public_id
+        new_public_id = f"uncategorized/{filename}"
+        
+        try:
+            # Copy to uncategorized location
+            result = cloudinary.uploader.upload(
+                photo.cloudinary_secure_url,
+                public_id=new_public_id,
+                folder='uncategorized',
+                resource_type='image'
+            )
+            
+            # Delete old location
+            cloudinary.uploader.destroy(old_public_id)
+            
+            # Update database
+            photo.cloudinary_public_id = result['public_id']
+            photo.cloudinary_url = result['url']
+            photo.cloudinary_secure_url = result['secure_url']
+            photo.cloudinary_folder = 'uncategorized'
+            
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Photo uncategorized successfully'
+            })
+            
+        except Exception as e:
+            print(f"Error uncategorizing photo in Cloudinary: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': 'Failed to uncategorize photo in cloud storage'
+            }), 500
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error uncategorizing photo: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to uncategorize photo'
+        }), 500
+
