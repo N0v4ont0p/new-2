@@ -447,6 +447,9 @@ class PhotoGallery {
                     this.photos = data.photos;
                 }
                 this.renderPhotos();
+                
+                // Update collection options for photo management
+                this.updateCollectionOptions();
             }
         } catch (error) {
             console.error('Error loading photos:', error);
@@ -483,25 +486,44 @@ class PhotoGallery {
         const modalTitle = document.getElementById('modalTitle');
         const downloadBtn = document.getElementById('downloadBtn');
         const adminActions = document.getElementById('adminPhotoActions');
+        const uncategorizeBtn = document.getElementById('uncategorizeBtn');
         
         modalImg.src = imageUrl;
         modalTitle.textContent = title;
         
-        // Set up download button
-        downloadBtn.onclick = () => {
-            const link = document.createElement('a');
-            link.href = imageUrl;
-            link.download = 'photo.jpg';
-            link.target = '_blank';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+        // Set up download button to actually download the file
+        downloadBtn.onclick = async () => {
+            try {
+                const response = await fetch(imageUrl);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `photo_${Date.now()}.jpg`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+                this.showNotification('Photo downloaded successfully!', 'success');
+            } catch (error) {
+                console.error('Download error:', error);
+                this.showNotification('Failed to download photo', 'error');
+            }
         };
         
         // Show admin actions if logged in and photoId is provided
         if (this.isLoggedIn && photoId) {
             adminActions.classList.remove('hidden');
             this.currentPhotoId = photoId;
+            
+            // Check if photo is already uncategorized and hide/show uncategorize button
+            const photo = this.photos.find(p => p.id === photoId);
+            if (photo && (!photo.cloudinary_folder || photo.cloudinary_folder === 'uncategorized')) {
+                uncategorizeBtn.style.display = 'none';
+            } else {
+                uncategorizeBtn.style.display = 'inline-flex';
+            }
+            
             this.setupPhotoManagement();
         } else {
             adminActions.classList.add('hidden');

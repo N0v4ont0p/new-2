@@ -81,12 +81,18 @@ def delete_collection(collection_id):
             }), 404
         
         # Delete collection
-        CloudinaryCollectionManager.delete_collection(collection_id)
+        success = CloudinaryCollectionManager.delete_collection(collection_id)
         
-        return jsonify({
-            'success': True,
-            'message': 'Collection deleted successfully'
-        })
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Collection deleted successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to delete collection'
+            }), 500
         
     except Exception as e:
         print(f"Error deleting collection: {str(e)}")

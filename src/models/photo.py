@@ -81,23 +81,24 @@ class CloudinaryCollectionManager:
                 existing_photo = Photo.query.filter_by(cloudinary_public_id=public_id).first()
                 
                 if not existing_photo:
-                    # Extract folder name (collection)
+                    # Extract folder name (collection) from public_id
                     folder_name = None
                     if '/' in public_id:
                         folder_name = public_id.split('/')[0]
+                        # Don't change folder assignment - keep it as is in Cloudinary
                     
                     # Create title from public_id
                     title = public_id.split('/')[-1] if '/' in public_id else public_id
                     title = title.replace('_', ' ').title()
                     
-                    # Create new photo record
+                    # Create new photo record with EXACT folder from Cloudinary
                     photo = Photo(
                         title=title,
                         description='',
                         cloudinary_public_id=public_id,
                         cloudinary_url=resource['url'],
                         cloudinary_secure_url=resource['secure_url'],
-                        cloudinary_folder=folder_name,
+                        cloudinary_folder=folder_name,  # Keep exact folder from Cloudinary
                         original_filename=resource.get('original_filename', title),
                         file_format=resource.get('format', 'jpg'),
                         file_size=resource.get('bytes', 0),
@@ -108,6 +109,15 @@ class CloudinaryCollectionManager:
                     
                     db.session.add(photo)
                     synced_count += 1
+                else:
+                    # Update existing photo's folder to match Cloudinary
+                    cloudinary_folder = None
+                    if '/' in public_id:
+                        cloudinary_folder = public_id.split('/')[0]
+                    
+                    if existing_photo.cloudinary_folder != cloudinary_folder:
+                        existing_photo.cloudinary_folder = cloudinary_folder
+                        print(f"Updated folder for {public_id}: {existing_photo.cloudinary_folder} -> {cloudinary_folder}")
             
             if synced_count > 0:
                 db.session.commit()
