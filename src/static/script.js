@@ -327,6 +327,71 @@ class PhotoGallery {
             });
     }
     
+    async viewCollection(collectionId) {
+        try {
+            // Load ONLY photos from this specific collection
+            const response = await fetch(`/api/photos?collection_id=${collectionId}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                // Filter to ensure we only show photos from this collection
+                this.photos = data.photos.filter(photo => 
+                    photo.cloudinary_folder === collectionId
+                );
+                
+                // Show collection view
+                document.getElementById('collectionsGrid').classList.add('hidden');
+                document.getElementById('uncategorizedSection').classList.add('hidden');
+                document.getElementById('photosGrid').classList.remove('hidden');
+                
+                // Update header
+                const sectionTitle = document.querySelector('.section-title');
+                const sectionSubtitle = document.querySelector('.section-subtitle');
+                
+                if (sectionTitle) {
+                    sectionTitle.textContent = collectionId.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                }
+                if (sectionSubtitle) {
+                    sectionSubtitle.innerHTML = `
+                        <button onclick="photoGallery.showGallery()" class="back-button">
+                            ← Back to Gallery
+                        </button>
+                    `;
+                }
+                
+                this.renderPhotos();
+                this.currentView = 'collection';
+                this.currentCollectionId = collectionId;
+            }
+        } catch (error) {
+            console.error('Error loading collection:', error);
+            this.showNotification('Failed to load collection', 'error');
+        }
+    }
+    
+    showGallery() {
+        // Reset to main gallery view
+        document.getElementById('collectionsGrid').classList.remove('hidden');
+        document.getElementById('photosGrid').classList.add('hidden');
+        
+        // Reset header
+        const sectionTitle = document.querySelector('.section-title');
+        const sectionSubtitle = document.querySelector('.section-subtitle');
+        
+        if (sectionTitle) {
+            sectionTitle.textContent = 'Photo Gallery';
+        }
+        if (sectionSubtitle) {
+            sectionSubtitle.textContent = 'Beautiful moments captured and organized';
+        }
+        
+        this.currentView = 'gallery';
+        this.currentCollectionId = null;
+        
+        // Reload collections and uncategorized photos
+        this.loadCollections();
+    }
+    
     updateCollectionOptions() {
         const select = document.getElementById('collectionSelect');
         const moveSelect = document.getElementById('moveToCollectionSelect');
@@ -516,13 +581,22 @@ class PhotoGallery {
             adminActions.classList.remove('hidden');
             this.currentPhotoId = photoId;
             
-            // Check if photo is already uncategorized and hide/show uncategorize button
-            const photo = this.photos.find(p => p.id === photoId);
-            if (photo && (!photo.cloudinary_folder || photo.cloudinary_folder === 'uncategorized')) {
-                uncategorizeBtn.style.display = 'none';
-            } else {
-                uncategorizeBtn.style.display = 'inline-flex';
-            }
+            // Load all photos to find the current photo's details
+            fetch('/api/photos')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const photo = data.photos.find(p => p.id === photoId);
+                        if (photo && (!photo.cloudinary_folder || photo.cloudinary_folder === 'uncategorized')) {
+                            uncategorizeBtn.style.display = 'none';
+                        } else {
+                            uncategorizeBtn.style.display = 'inline-flex';
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading photo details:', error);
+                });
             
             this.setupPhotoManagement();
         } else {

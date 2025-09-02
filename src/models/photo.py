@@ -140,25 +140,13 @@ class CloudinaryCollectionManager:
             for folder in result.get('folders', []):
                 folder_name = folder['name']
                 
-                # Skip system folders
-                if folder_name.startswith('.') or folder_name in ['uncategorized']:
+                # Skip system folders and unwanted collections
+                if folder_name.startswith('.') or folder_name in ['uncategorized', 'georges_photo_gallery']:
                     continue
-                
-                # Get photo count for this folder
-                try:
-                    folder_result = cloudinary.api.resources(
-                        type='upload',
-                        prefix=f"{folder_name}/",
-                        max_results=1
-                    )
-                    photo_count = folder_result.get('total_count', 0)
-                except:
-                    photo_count = 0
                 
                 collections.append({
                     'id': folder_name,
                     'name': folder_name.replace('_', ' ').title(),
-                    'photo_count': photo_count,
                     'created_at': datetime.utcnow().isoformat()
                 })
             
