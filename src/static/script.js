@@ -347,9 +347,10 @@ class PhotoGallery {
                     photo.cloudinary_folder !== 'uncategorized'
                 );
                 
-                // Show collection view
+                // COMPLETELY HIDE everything except the collection photos
                 document.getElementById('collectionsGrid').classList.add('hidden');
                 document.getElementById('uncategorizedSection').classList.add('hidden');
+                document.getElementById('uncategorizedSection').style.display = 'none'; // Force hide
                 document.getElementById('photosGrid').classList.remove('hidden');
                 
                 // Update header
@@ -381,6 +382,11 @@ class PhotoGallery {
         // Reset to main gallery view
         document.getElementById('collectionsGrid').classList.remove('hidden');
         document.getElementById('photosGrid').classList.add('hidden');
+        
+        // Show uncategorized section again in main gallery
+        const uncategorizedSection = document.getElementById('uncategorizedSection');
+        uncategorizedSection.classList.remove('hidden');
+        uncategorizedSection.style.display = 'block'; // Force show
         
         // Reset header
         const sectionTitle = document.querySelector('.section-title');
