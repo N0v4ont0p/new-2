@@ -334,48 +334,69 @@ class PhotoGallery {
     
     async viewCollection(collectionId) {
         try {
-            // Load ONLY photos from this specific collection - strict filtering
+            // Load ONLY photos from this specific collection
             const response = await fetch(`/api/photos?collection_id=${collectionId}`);
             const data = await response.json();
             
             if (data.success) {
                 // STRICT filtering - only photos that belong to this exact collection
-                this.photos = data.photos.filter(photo => 
+                const collectionPhotos = data.photos.filter(photo => 
+                    photo &&
+                    photo.id &&
+                    photo.cloudinary_secure_url &&
+                    photo.cloudinary_secure_url !== 'undefined' &&
+                    photo.cloudinary_secure_url.startsWith('http') &&
                     photo.cloudinary_folder === collectionId && 
                     photo.cloudinary_folder !== null && 
                     photo.cloudinary_folder !== undefined &&
                     photo.cloudinary_folder !== 'uncategorized'
                 );
                 
-                // COMPLETELY HIDE everything except the collection photos
-                document.getElementById('collectionsGrid').classList.add('hidden');
-                document.getElementById('uncategorizedSection').classList.add('hidden');
-                document.getElementById('uncategorizedSection').style.display = 'none'; // Force hide
-                document.getElementById('photosGrid').classList.remove('hidden');
-                
-                // Update header
-                const sectionTitle = document.querySelector('.section-title');
-                const sectionSubtitle = document.querySelector('.section-subtitle');
-                
-                if (sectionTitle) {
-                    sectionTitle.textContent = collectionId.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-                }
-                if (sectionSubtitle) {
-                    sectionSubtitle.innerHTML = `
-                        <button onclick="photoGallery.showGallery()" class="back-button">
-                            ← Back to Gallery
-                        </button>
-                    `;
-                }
-                
-                this.renderPhotos();
-                this.currentView = 'collection';
-                this.currentCollectionId = collectionId;
+                // Open collection modal popup
+                this.openCollectionModal(collectionId, collectionPhotos);
             }
         } catch (error) {
             console.error('Error loading collection:', error);
             this.showNotification('Failed to load collection', 'error');
         }
+    }
+    
+    openCollectionModal(collectionId, photos) {
+        const modal = document.getElementById('collectionModal');
+        const modalTitle = document.getElementById('collectionModalTitle');
+        const photosGrid = document.getElementById('collectionPhotosGrid');
+        
+        // Set title
+        modalTitle.textContent = collectionId.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+        
+        // Render photos in modal
+        if (photos.length === 0) {
+            photosGrid.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📷</div>
+                    <h3 class="empty-state-title">No Photos in Collection</h3>
+                    <p class="empty-state-text">Upload photos to this collection to see them here</p>
+                </div>
+            `;
+        } else {
+            const photosHTML = photos.map(photo => `
+                <div class="photo-item" onclick="photoGallery.viewPhoto('${photo.cloudinary_secure_url}', 'Photo', ${photo.id})">
+                    <img src="${photo.cloudinary_secure_url}" alt="Photo" loading="lazy">
+                </div>
+            `).join('');
+            
+            photosGrid.innerHTML = photosHTML;
+        }
+        
+        // Show modal
+        modal.classList.add('active');
+        this.currentCollectionId = collectionId;
+    }
+    
+    closeCollectionModal() {
+        const modal = document.getElementById('collectionModal');
+        modal.classList.remove('active');
+        this.currentCollectionId = null;
     }
     
     showGallery() {
@@ -732,9 +753,14 @@ class PhotoGallery {
     }
     
     closeModal() {
-        const modals = document.querySelectorAll('.modal');
-        modals.forEach(modal => modal.classList.remove('active'));
+        const photoModal = document.getElementById('photoModal');
+        const collectionModal = document.getElementById('collectionModal');
+        
+        photoModal.classList.remove('active');
+        collectionModal.classList.remove('active');
+        
         this.currentPhotoId = null;
+        this.currentCollectionId = null;
     }
     
     // File Upload
@@ -897,29 +923,47 @@ document.addEventListener('DOMContentLoaded', () => {
     photoGallery = new PhotoGallery();
     
     // Set up modal close functionality
-    const modal = document.getElementById('photoModal');
-    const modalClose = document.querySelector('.modal-close');
+    const photoModal = document.getElementById('photoModal');
+    const collectionModal = document.getElementById('collectionModal');
+    const photoModalClose = document.querySelector('#photoModal .modal-close');
+    const collectionModalClose = document.querySelector('#collectionModal .modal-close');
     
-    // Close modal when clicking the X button
-    if (modalClose) {
-        modalClose.addEventListener('click', () => {
+    // Close photo modal when clicking the X button
+    if (photoModalClose) {
+        photoModalClose.addEventListener('click', () => {
             photoGallery.closeModal();
         });
     }
     
-    // Close modal when clicking outside the modal content
-    if (modal) {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
+    // Close collection modal when clicking the X button
+    if (collectionModalClose) {
+        collectionModalClose.addEventListener('click', () => {
+            photoGallery.closeCollectionModal();
+        });
+    }
+    
+    // Close modals when clicking outside the modal content
+    if (photoModal) {
+        photoModal.addEventListener('click', (e) => {
+            if (e.target === photoModal) {
                 photoGallery.closeModal();
             }
         });
     }
     
-    // Close modal with Escape key
+    if (collectionModal) {
+        collectionModal.addEventListener('click', (e) => {
+            if (e.target === collectionModal) {
+                photoGallery.closeCollectionModal();
+            }
+        });
+    }
+    
+    // Close modals with Escape key
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             photoGallery.closeModal();
+            photoGallery.closeCollectionModal();
         }
     });
 });

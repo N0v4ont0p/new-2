@@ -484,6 +484,22 @@ p {
     color: var(--apple-gray-400);
 }
 
+.collection-modal-content {
+    max-width: 1000px;
+    max-height: 90vh;
+    width: 95%;
+}
+
+.collection-modal-content .modal-body {
+    padding: var(--spacing-xl);
+    max-height: 75vh;
+    overflow-y: auto;
+}
+
+.collection-modal-content .photo-grid {
+    margin-top: 0;
+}
+
 /* Upload Area */
 .upload-area {
     border: 2px dashed var(--apple-gray-300);
