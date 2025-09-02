@@ -301,7 +301,12 @@ class PhotoGallery {
             .then(data => {
                 if (data.success) {
                     const uncategorizedPhotos = data.photos.filter(photo => 
-                        !photo.cloudinary_folder || photo.cloudinary_folder === 'uncategorized'
+                        photo &&
+                        photo.id &&
+                        photo.cloudinary_secure_url &&
+                        photo.cloudinary_secure_url !== 'undefined' &&
+                        photo.cloudinary_secure_url.startsWith('http') &&
+                        (!photo.cloudinary_folder || photo.cloudinary_folder === 'uncategorized')
                     );
                     
                     const uncategorizedSection = document.getElementById('uncategorizedSection');
@@ -329,14 +334,17 @@ class PhotoGallery {
     
     async viewCollection(collectionId) {
         try {
-            // Load ONLY photos from this specific collection
+            // Load ONLY photos from this specific collection - strict filtering
             const response = await fetch(`/api/photos?collection_id=${collectionId}`);
             const data = await response.json();
             
             if (data.success) {
-                // Filter to ensure we only show photos from this collection
+                // STRICT filtering - only photos that belong to this exact collection
                 this.photos = data.photos.filter(photo => 
-                    photo.cloudinary_folder === collectionId
+                    photo.cloudinary_folder === collectionId && 
+                    photo.cloudinary_folder !== null && 
+                    photo.cloudinary_folder !== undefined &&
+                    photo.cloudinary_folder !== 'uncategorized'
                 );
                 
                 // Show collection view
@@ -524,7 +532,16 @@ class PhotoGallery {
     renderPhotos() {
         const photosGrid = document.getElementById('photosGrid');
         
-        if (this.photos.length === 0) {
+        // Filter out any undefined or invalid photos
+        const validPhotos = this.photos.filter(photo => 
+            photo && 
+            photo.id && 
+            photo.cloudinary_secure_url &&
+            photo.cloudinary_secure_url !== 'undefined' &&
+            photo.cloudinary_secure_url.startsWith('http')
+        );
+        
+        if (validPhotos.length === 0) {
             const emptyState = `
                 <div class="empty-state">
                     <div class="empty-state-icon">📷</div>
@@ -536,7 +553,7 @@ class PhotoGallery {
             return;
         }
         
-        const photosHTML = this.photos.map(photo => `
+        const photosHTML = validPhotos.map(photo => `
             <div class="photo-item" onclick="photoGallery.viewPhoto('${photo.cloudinary_secure_url}', 'Photo', ${photo.id})">
                 <img src="${photo.cloudinary_secure_url}" alt="Photo" loading="lazy">
             </div>
@@ -872,5 +889,32 @@ let photoGallery;
 
 document.addEventListener('DOMContentLoaded', () => {
     photoGallery = new PhotoGallery();
+    
+    // Set up modal close functionality
+    const modal = document.getElementById('photoModal');
+    const modalClose = document.querySelector('.modal-close');
+    
+    // Close modal when clicking the X button
+    if (modalClose) {
+        modalClose.addEventListener('click', () => {
+            photoGallery.closeModal();
+        });
+    }
+    
+    // Close modal when clicking outside the modal content
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                photoGallery.closeModal();
+            }
+        });
+    }
+    
+    // Close modal with Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            photoGallery.closeModal();
+        }
+    });
 });
 

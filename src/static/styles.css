@@ -618,36 +618,41 @@ p {
 .modal {
     display: none;
     position: fixed;
-    z-index: 1000;
+    z-index: 10000;
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.8);
+    background-color: rgba(0, 0, 0, 0.85);
     backdrop-filter: blur(20px);
     transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    opacity: 0;
+    visibility: hidden;
 }
 
 .modal.active {
     display: flex;
     align-items: center;
     justify-content: center;
+    opacity: 1;
+    visibility: visible;
 }
 
 .modal-content {
     background-color: var(--apple-white);
     border-radius: var(--radius-xl);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
     max-width: 600px;
-    max-height: 80vh;
+    max-height: 85vh;
     width: 90%;
     overflow: hidden;
-    transform: scale(0.9);
-    transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transform: scale(0.8) translateY(20px);
+    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    position: relative;
 }
 
 .modal.active .modal-content {
-    transform: scale(1);
+    transform: scale(1) translateY(0);
 }
 
 .modal-header {
@@ -656,6 +661,7 @@ p {
     align-items: center;
     padding: var(--spacing-lg) var(--spacing-xl);
     border-bottom: 1px solid var(--apple-gray-200);
+    background: var(--apple-white);
 }
 
 .modal-title {
@@ -668,12 +674,17 @@ p {
 .modal-close {
     background: none;
     border: none;
-    font-size: 24px;
+    font-size: 28px;
     color: var(--apple-gray-500);
     cursor: pointer;
     padding: var(--spacing-xs);
     border-radius: var(--radius-sm);
     transition: all var(--transition);
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .modal-close:hover {
@@ -695,6 +706,7 @@ p {
     border-radius: var(--radius-md);
     margin-bottom: var(--spacing-lg);
     object-fit: contain;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
 
 .modal-actions {
