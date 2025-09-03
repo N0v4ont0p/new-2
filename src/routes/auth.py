@@ -1,91 +1,43 @@
-from flask import Blueprint, request, jsonify, session
 import os
+from flask import Blueprint, request, jsonify, session
+from dotenv import load_dotenv
+
+load_dotenv()
 
 auth_bp = Blueprint('auth', __name__)
 
-# Admin password from environment variable
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'Hanshow99@')
-
-@auth_bp.route('/auth/login', methods=['POST'])
+@auth_bp.route('/login', methods=['POST'])
 def login():
-    """Admin login endpoint with cookie-based sessions"""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'success': False,
-                'error': 'No data provided'
-            }), 400
-        
-        password = data.get('password', '')
-        
-        if password == ADMIN_PASSWORD:
-            # Set permanent session (30 days)
-            session.permanent = True
-            session['admin_logged_in'] = True
-            
-            return jsonify({
-                'success': True,
-                'message': 'Login successful'
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'Invalid password'
-            }), 401
-            
-    except Exception as e:
-        print(f"Login error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Login failed'
-        }), 500
+    """Admin login endpoint"""
+    data = request.get_json()
+    password = data.get('password')
+    
+    admin_password = os.environ.get('ADMIN_PASSWORD', 'Hanshow99@')
+    
+    if password == admin_password:
+        session['authenticated'] = True
+        return jsonify({'success': True, 'message': 'Login successful'})
+    else:
+        return jsonify({'success': False, 'message': 'Invalid password'}), 401
 
-@auth_bp.route('/auth/logout', methods=['POST'])
+@auth_bp.route('/logout', methods=['POST'])
 def logout():
     """Admin logout endpoint"""
-    try:
-        session.pop('admin_logged_in', None)
-        session.permanent = False
-        
-        return jsonify({
-            'success': True,
-            'message': 'Logout successful'
-        })
-    except Exception as e:
-        print(f"Logout error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Logout failed'
-        }), 500
+    session.pop('authenticated', None)
+    return jsonify({'success': True, 'message': 'Logged out successfully'})
 
-@auth_bp.route('/auth/status', methods=['GET'])
+@auth_bp.route('/status', methods=['GET'])
 def status():
     """Check authentication status"""
-    try:
-        authenticated = session.get('admin_logged_in', False)
-        return jsonify({
-            'success': True,
-            'authenticated': authenticated
-        })
-    except Exception as e:
-        print(f"Auth status error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'authenticated': False
-        }), 500
+    is_authenticated = session.get('authenticated', False)
+    return jsonify({'authenticated': is_authenticated, 'success': True})
 
-def require_admin_auth(f):
-    """Decorator to require admin authentication"""
-    from functools import wraps
-    
-    @wraps(f)
+def require_auth(f):
+    """Decorator to require authentication"""
     def decorated_function(*args, **kwargs):
-        if not session.get('admin_logged_in', False):
-            return jsonify({
-                'success': False,
-                'error': 'Admin authentication required'
-            }), 401
+        if not session.get('authenticated', False):
+            return jsonify({'success': False, 'message': 'Authentication required'}), 401
         return f(*args, **kwargs)
+    decorated_function.__name__ = f.__name__
     return decorated_function
 

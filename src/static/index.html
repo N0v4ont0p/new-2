@@ -4,12 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Photo Gallery</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="apple-touch-icon" href="/favicon.ico">
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-    <!-- Apple-style Navigation -->
+    <!-- Navigation -->
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">
@@ -45,52 +43,24 @@
             <!-- Collection View -->
             <section id="collectionSection" class="section hidden">
                 <div class="collection-header">
-                    <button class="back-btn" onclick="photoGallery.showGallery()">
+                    <button class="back-btn" onclick="gallery.showGallery()">
                         <span>←</span> Back to Gallery
                     </button>
-                    <h1 id="collectionTitle" class="collection-title">Collection</h1>
-                    <div class="collection-actions">
-                        <button id="selectAllBtn" class="btn btn-secondary hidden" onclick="photoGallery.selectAllPhotos()">
-                            Select All
-                        </button>
-                        <button id="deleteSelectedBtn" class="btn btn-danger hidden" onclick="photoGallery.deleteSelectedPhotos()">
-                            Delete Selected
-                        </button>
-                    </div>
+                    <h2 id="collectionTitle" class="collection-title"></h2>
                 </div>
-                <div id="collectionPhotosGrid" class="photos-grid"></div>
+                <div id="photosGrid" class="photos-grid"></div>
             </section>
         </div>
     </main>
 
-    <!-- Apple-style Footer -->
-    <footer class="footer">
-        <div class="footer-container">
-            <div class="footer-content">
-                <p class="footer-text">© 2025 Photo Gallery. Powered by Cloudinary.</p>
-                <div class="footer-links">
-                    <span class="footer-link">Privacy</span>
-                    <span class="footer-link">Terms</span>
-                    <span class="footer-link">Support</span>
-                </div>
-            </div>
-        </div>
-    </footer>
-
     <!-- Photo Modal -->
-    <div id="photoModal" class="modal">
+    <div id="photoModal" class="modal hidden">
+        <div class="modal-backdrop" onclick="gallery.closeModal()"></div>
         <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modalTitle" class="modal-title">Photo</h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <div class="modal-body">
-                <img id="modalImage" src="" alt="Photo">
-                <div class="modal-actions">
-                    <button id="downloadBtn" class="btn btn-primary">
-                        <span>⬇️</span> Download
-                    </button>
-                </div>
+            <button class="modal-close" onclick="gallery.closeModal()">×</button>
+            <img id="modalImage" src="" alt="">
+            <div class="modal-actions">
+                <button id="downloadBtn" class="modal-btn">Download</button>
             </div>
         </div>
     </div>
@@ -98,4 +68,3 @@
     <script src="/script.js"></script>
 </body>
 </html>
-

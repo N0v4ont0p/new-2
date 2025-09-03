@@ -1,19 +1,18 @@
 services:
   - type: web
-    name: photo-gallery
+    name: photo-gallery-rebuilt
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python src/main.py
     plan: free
+    autoDeploy: false
     envVars:
+      - key: ADMIN_PASSWORD
+        value: Hanshow99@
       - key: CLOUDINARY_CLOUD_NAME
-        sync: false
+        value: your_cloudinary_cloud_name
       - key: CLOUDINARY_API_KEY
-        sync: false
+        value: your_cloudinary_api_key
       - key: CLOUDINARY_API_SECRET
-        sync: false
-      - key: SECRET_KEY
-        generateValue: true
-      - key: DATABASE_DIR
-        value: /tmp
+        value: your_cloudinary_api_secret
 

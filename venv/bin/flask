@@ -1,4 +1,4 @@
-#!/home/ubuntu/photo-gallery-v2/venv/bin/python3.11
+#!/home/ubuntu/photo-gallery-rebuilt/venv/bin/python3.11
 # -*- coding: utf-8 -*-
 import re
 import sys

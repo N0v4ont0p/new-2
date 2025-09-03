@@ -1,11 +1,11 @@
 class AdminPanel {
     constructor() {
-        this.isLoggedIn = false;
+        this.isAuthenticated = false;
         this.collections = [];
         this.photos = [];
         this.selectedPhotos = new Set();
-        this.massDeleteMode = false;
-        this.currentPhotoId = null;
+        this.selectMode = false;
+        this.currentPhoto = null;
         
         this.init();
     }
@@ -14,52 +14,83 @@ class AdminPanel {
         await this.checkAuthStatus();
         this.setupEventListeners();
         
-        if (this.isLoggedIn) {
-            await this.loadCollections();
-            await this.loadPhotos();
+        if (this.isAuthenticated) {
+            this.showAdminContent();
+            await this.loadData();
+        } else {
+            this.showLoginSection();
         }
     }
     
     setupEventListeners() {
-        // File input change
-        document.getElementById('fileInput').addEventListener('change', (e) => {
-            this.handleFileSelect(e.target.files);
-        });
-        
-        // Drag and drop
-        const uploadArea = document.getElementById('uploadArea');
-        uploadArea.addEventListener('dragover', (e) => {
+        // Login form
+        document.getElementById('loginForm').addEventListener('submit', (e) => {
             e.preventDefault();
-            uploadArea.classList.add('dragover');
+            this.login();
         });
         
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
+        // Logout button
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            this.logout();
         });
         
-        uploadArea.addEventListener('drop', (e) => {
+        // File upload
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            this.handleFileSelect(e.dataTransfer.files);
+            dropZone.classList.add('drag-over');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            this.handleFiles(e.dataTransfer.files);
         });
         
-        // Collection selection change
-        document.getElementById('viewCollection').addEventListener('change', (e) => {
-            this.filterPhotosByCollection(e.target.value);
+        fileInput.addEventListener('change', (e) => {
+            this.handleFiles(e.target.files);
         });
         
-        // Enter key for password
-        document.getElementById('adminPassword').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.login();
-            }
+        // Collection management
+        document.getElementById('createCollectionBtn').addEventListener('click', () => {
+            this.showModal('createCollectionModal');
         });
         
-        // Enter key for collection name
-        document.getElementById('collectionName').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.createCollection();
-            }
+        document.getElementById('createCollectionForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.createCollection();
+        });
+        
+        // Photo management
+        document.getElementById('toggleSelectBtn').addEventListener('click', () => {
+            this.toggleSelectMode();
+        });
+        
+        document.getElementById('massDeleteBtn').addEventListener('click', () => {
+            this.massDeletePhotos();
+        });
+        
+        // Photo modal actions
+        document.getElementById('downloadPhotoBtn').addEventListener('click', () => {
+            this.downloadCurrentPhoto();
+        });
+        
+        document.getElementById('movePhotoBtn').addEventListener('click', () => {
+            this.showMovePhotoModal();
+        });
+        
+        document.getElementById('deletePhotoBtn').addEventListener('click', () => {
+            this.deleteCurrentPhoto();
+        });
+        
+        document.getElementById('movePhotoForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.movePhoto();
         });
     }
     
@@ -67,72 +98,95 @@ class AdminPanel {
         try {
             const response = await fetch('/api/auth/status');
             const data = await response.json();
-            this.isLoggedIn = data.authenticated;
-            this.updateUI();
+            this.isAuthenticated = data.authenticated;
         } catch (error) {
             console.error('Error checking auth status:', error);
-            this.isLoggedIn = false;
-            this.updateUI();
+            this.isAuthenticated = false;
         }
     }
     
     async login() {
-        const password = document.getElementById('adminPassword').value;
-        
-        if (!password) {
-            this.showNotification('Please enter a password', 'error');
-            return;
-        }
+        const password = document.getElementById('password').value;
+        const errorDiv = document.getElementById('loginError');
         
         try {
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password })
             });
             
             const data = await response.json();
             
             if (data.success) {
-                this.isLoggedIn = true;
-                this.showNotification('Login successful!', 'success');
-                this.updateUI();
-                await this.loadCollections();
-                await this.loadPhotos();
+                this.isAuthenticated = true;
+                this.showAdminContent();
+                await this.loadData();
             } else {
-                this.showNotification('Invalid password', 'error');
+                errorDiv.textContent = data.message;
+                errorDiv.classList.remove('hidden');
             }
         } catch (error) {
             console.error('Login error:', error);
-            this.showNotification('Login failed', 'error');
+            errorDiv.textContent = 'Login failed. Please try again.';
+            errorDiv.classList.remove('hidden');
         }
     }
     
-    updateUI() {
-        const loginSection = document.getElementById('loginSection');
-        const adminDashboard = document.getElementById('adminDashboard');
-        
-        if (this.isLoggedIn) {
-            loginSection.classList.add('hidden');
-            adminDashboard.classList.remove('hidden');
-        } else {
-            loginSection.classList.remove('hidden');
-            adminDashboard.classList.add('hidden');
+    async logout() {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            this.isAuthenticated = false;
+            this.showLoginSection();
+        } catch (error) {
+            console.error('Logout error:', error);
         }
+    }
+    
+    showLoginSection() {
+        document.getElementById('loginSection').classList.remove('hidden');
+        document.getElementById('adminContent').classList.add('hidden');
+    }
+    
+    showAdminContent() {
+        document.getElementById('loginSection').classList.add('hidden');
+        document.getElementById('adminContent').classList.remove('hidden');
+    }
+    
+    async loadData() {
+        await Promise.all([
+            this.loadCollections(),
+            this.loadPhotos()
+        ]);
+        
+        this.renderCollections();
+        this.renderPhotos();
+        this.updateCollectionSelects();
     }
     
     async loadCollections() {
         try {
             const response = await fetch('/api/collections');
             const data = await response.json();
-            this.collections = data.collections || [];
-            this.renderCollections();
-            this.updateCollectionSelects();
+            
+            if (data.success) {
+                this.collections = data.collections;
+            }
         } catch (error) {
             console.error('Error loading collections:', error);
-            this.showNotification('Failed to load collections', 'error');
+        }
+    }
+    
+    async loadPhotos() {
+        try {
+            const response = await fetch('/api/photos');
+            const data = await response.json();
+            
+            if (data.success) {
+                this.photos = data.photos;
+            }
+        } catch (error) {
+            console.error('Error loading photos:', error);
         }
     }
     
@@ -140,44 +194,64 @@ class AdminPanel {
         const grid = document.getElementById('collectionsGrid');
         
         if (this.collections.length === 0) {
-            grid.innerHTML = '<p style="text-align: center; color: var(--apple-gray-500);">No collections yet. Create your first collection above.</p>';
+            grid.innerHTML = `
+                <div class="empty-state">
+                    <h3>No Collections</h3>
+                    <p>Create your first collection to get started.</p>
+                </div>
+            `;
             return;
         }
         
-        const collectionsHTML = this.collections.map(collection => `
-            <div class="collection-card">
-                <div class="collection-name">${collection.name}</div>
+        grid.innerHTML = this.collections.map(collection => `
+            <div class="admin-collection-card">
+                <h3>${collection.name}</h3>
+                <p>${collection.photo_count} photos</p>
                 <div class="collection-actions">
-                    <button onclick="adminPanel.viewCollectionPhotos('${collection.id}')" class="btn-secondary">View Photos</button>
-                    <button onclick="adminPanel.deleteCollection('${collection.id}')" class="btn-danger">Delete</button>
+                    <button class="btn btn-danger" onclick="admin.deleteCollection('${collection.name}')">Delete</button>
                 </div>
             </div>
         `).join('');
+    }
+    
+    renderPhotos() {
+        const grid = document.getElementById('photosGrid');
         
-        grid.innerHTML = collectionsHTML;
+        if (this.photos.length === 0) {
+            grid.innerHTML = `
+                <div class="empty-state">
+                    <h3>No Photos</h3>
+                    <p>Upload your first photos to get started.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        grid.innerHTML = this.photos.map(photo => `
+            <div class="admin-photo-item" onclick="admin.viewPhoto(${photo.id}, '${photo.cloudinary_secure_url}', '${photo.filename}')">
+                <img src="${photo.cloudinary_secure_url}" alt="${photo.filename}" loading="lazy">
+                ${this.selectMode ? `
+                    <div class="photo-checkbox ${this.selectedPhotos.has(photo.id) ? 'checked' : ''}" 
+                         onclick="event.stopPropagation(); admin.togglePhotoSelection(${photo.id})">
+                        ${this.selectedPhotos.has(photo.id) ? '✓' : ''}
+                    </div>
+                ` : ''}
+            </div>
+        `).join('');
     }
     
     updateCollectionSelects() {
-        const selects = ['uploadCollection', 'viewCollection', 'moveToCollection'];
+        const selects = ['collectionSelect', 'moveToCollection'];
         
         selects.forEach(selectId => {
             const select = document.getElementById(selectId);
             const currentValue = select.value;
             
-            // Clear existing options except the first one
-            while (select.children.length > 1) {
-                select.removeChild(select.lastChild);
-            }
+            select.innerHTML = '<option value="">Select Collection</option>' +
+                this.collections.map(collection => 
+                    `<option value="${collection.name}">${collection.name}</option>`
+                ).join('');
             
-            // Add collection options
-            this.collections.forEach(collection => {
-                const option = document.createElement('option');
-                option.value = collection.id;
-                option.textContent = collection.name;
-                select.appendChild(option);
-            });
-            
-            // Restore selection if it still exists
             if (currentValue) {
                 select.value = currentValue;
             }
@@ -187,28 +261,26 @@ class AdminPanel {
     async createCollection() {
         const name = document.getElementById('collectionName').value.trim();
         
-        if (!name) {
-            this.showNotification('Please enter a collection name', 'error');
-            return;
-        }
+        if (!name) return;
         
         try {
             const response = await fetch('/api/collections', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name })
             });
             
             const data = await response.json();
             
             if (data.success) {
-                this.showNotification('Collection created successfully!', 'success');
+                this.closeModal('createCollectionModal');
                 document.getElementById('collectionName').value = '';
                 await this.loadCollections();
+                this.renderCollections();
+                this.updateCollectionSelects();
+                this.showNotification('Collection created successfully', 'success');
             } else {
-                this.showNotification(data.message || 'Failed to create collection', 'error');
+                this.showNotification(data.message, 'error');
             }
         } catch (error) {
             console.error('Error creating collection:', error);
@@ -216,24 +288,23 @@ class AdminPanel {
         }
     }
     
-    async deleteCollection(collectionId) {
-        if (!confirm('Are you sure you want to delete this collection? This will also delete all photos in it.')) {
+    async deleteCollection(name) {
+        if (!confirm(`Are you sure you want to delete the collection "${name}" and all its photos?`)) {
             return;
         }
         
         try {
-            const response = await fetch(`/api/collections/${collectionId}`, {
+            const response = await fetch(`/api/collections/${encodeURIComponent(name)}`, {
                 method: 'DELETE'
             });
             
             const data = await response.json();
             
             if (data.success) {
-                this.showNotification('Collection deleted successfully!', 'success');
-                await this.loadCollections();
-                await this.loadPhotos();
+                await this.loadData();
+                this.showNotification('Collection deleted successfully', 'success');
             } else {
-                this.showNotification(data.message || 'Failed to delete collection', 'error');
+                this.showNotification(data.message, 'error');
             }
         } catch (error) {
             console.error('Error deleting collection:', error);
@@ -241,118 +312,73 @@ class AdminPanel {
         }
     }
     
-    async loadPhotos() {
-        try {
-            const response = await fetch('/api/photos');
-            const data = await response.json();
-            this.photos = data.photos || [];
-            this.renderPhotos();
-        } catch (error) {
-            console.error('Error loading photos:', error);
-            this.showNotification('Failed to load photos', 'error');
-        }
-    }
-    
-    renderPhotos() {
-        const grid = document.getElementById('photosGrid');
-        const selectedCollection = document.getElementById('viewCollection').value;
+    async handleFiles(files) {
+        const collectionName = document.getElementById('collectionSelect').value;
+        const progressDiv = document.getElementById('uploadProgress');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
         
-        let photosToShow = this.photos;
-        if (selectedCollection) {
-            photosToShow = this.photos.filter(photo => photo.collection_id == selectedCollection);
-        }
+        progressDiv.classList.remove('hidden');
         
-        if (photosToShow.length === 0) {
-            grid.innerHTML = '<p style="text-align: center; color: var(--apple-gray-500);">No photos found.</p>';
-            return;
-        }
-        
-        const photosHTML = photosToShow.map(photo => `
-            <div class="photo-item" onclick="adminPanel.viewPhoto('${photo.cloudinary_secure_url}', '${photo.filename || 'Photo'}', ${photo.id})">
-                <img src="${photo.cloudinary_secure_url}" alt="Photo" loading="lazy">
-                ${this.massDeleteMode ? `
-                    <div class="photo-checkbox ${this.selectedPhotos.has(photo.id) ? 'checked' : ''}" 
-                         onclick="event.stopPropagation(); adminPanel.togglePhotoSelection(${photo.id})">
-                        ${this.selectedPhotos.has(photo.id) ? '✓' : ''}
-                    </div>
-                ` : ''}
-            </div>
-        `).join('');
-        
-        grid.innerHTML = photosHTML;
-    }
-    
-    filterPhotosByCollection(collectionId) {
-        this.renderPhotos();
-    }
-    
-    viewCollectionPhotos(collectionId) {
-        document.getElementById('viewCollection').value = collectionId;
-        this.renderPhotos();
-    }
-    
-    async handleFileSelect(files) {
-        const collectionId = document.getElementById('uploadCollection').value;
-        
-        if (!collectionId) {
-            this.showNotification('Please select a collection first', 'error');
-            return;
-        }
-        
-        if (files.length === 0) return;
-        
-        this.showNotification(`Uploading ${files.length} photo(s)...`, 'success');
+        let uploaded = 0;
+        const total = files.length;
         
         for (const file of files) {
-            await this.uploadPhoto(file, collectionId);
-        }
-        
-        await this.loadPhotos();
-    }
-    
-    async uploadPhoto(file, collectionId) {
-        const formData = new FormData();
-        formData.append('photo', file);
-        formData.append('collection_id', collectionId);
-        
-        try {
-            const response = await fetch('/api/photos/upload', {
-                method: 'POST',
-                body: formData
-            });
-            
-            const data = await response.json();
-            
-            if (!data.success) {
-                this.showNotification(`Failed to upload ${file.name}: ${data.message}`, 'error');
+            try {
+                const formData = new FormData();
+                formData.append('photo', file);
+                if (collectionName) {
+                    formData.append('collection_name', collectionName);
+                }
+                
+                const response = await fetch('/api/photos/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    uploaded++;
+                } else {
+                    console.error('Upload failed:', data.message);
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
             }
-        } catch (error) {
-            console.error('Upload error:', error);
-            this.showNotification(`Failed to upload ${file.name}`, 'error');
+            
+            // Update progress
+            const progress = (uploaded / total) * 100;
+            progressFill.style.width = `${progress}%`;
+            progressText.textContent = `Uploaded ${uploaded}/${total} photos`;
         }
+        
+        // Hide progress and reload data
+        setTimeout(() => {
+            progressDiv.classList.add('hidden');
+            progressFill.style.width = '0%';
+        }, 1000);
+        
+        await this.loadData();
+        this.showNotification(`Successfully uploaded ${uploaded} photos`, 'success');
     }
     
-    toggleMassDelete() {
-        this.massDeleteMode = !this.massDeleteMode;
-        const massDeleteBtn = document.getElementById('massDeleteBtn');
-        const selectAllBtn = document.getElementById('selectAllBtn');
-        const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    toggleSelectMode() {
+        this.selectMode = !this.selectMode;
+        this.selectedPhotos.clear();
         
-        if (this.massDeleteMode) {
-            massDeleteBtn.textContent = '✓ Exit Mass Delete';
-            massDeleteBtn.classList.add('active');
-            selectAllBtn.classList.remove('hidden');
-            deleteSelectedBtn.classList.remove('hidden');
+        const toggleBtn = document.getElementById('toggleSelectBtn');
+        const massDeleteBtn = document.getElementById('massDeleteBtn');
+        
+        if (this.selectMode) {
+            toggleBtn.textContent = 'Cancel Selection';
+            massDeleteBtn.classList.remove('hidden');
         } else {
-            massDeleteBtn.textContent = '🗑️ Mass Delete';
-            massDeleteBtn.classList.remove('active');
-            selectAllBtn.classList.add('hidden');
-            deleteSelectedBtn.classList.add('hidden');
-            this.selectedPhotos.clear();
+            toggleBtn.textContent = 'Select Photos';
+            massDeleteBtn.classList.add('hidden');
         }
         
         this.renderPhotos();
-        this.updateDeleteSelectedButton();
     }
     
     togglePhotoSelection(photoId) {
@@ -361,133 +387,78 @@ class AdminPanel {
         } else {
             this.selectedPhotos.add(photoId);
         }
+        
         this.renderPhotos();
-        this.updateDeleteSelectedButton();
     }
     
-    selectAllPhotos() {
-        const selectedCollection = document.getElementById('viewCollection').value;
-        let photosToShow = this.photos;
-        if (selectedCollection) {
-            photosToShow = this.photos.filter(photo => photo.collection_id == selectedCollection);
-        }
-        
-        if (this.selectedPhotos.size === photosToShow.length) {
-            // Deselect all
-            this.selectedPhotos.clear();
-        } else {
-            // Select all
-            photosToShow.forEach(photo => this.selectedPhotos.add(photo.id));
-        }
-        this.renderPhotos();
-        this.updateDeleteSelectedButton();
-    }
-    
-    updateDeleteSelectedButton() {
-        const btn = document.getElementById('deleteSelectedBtn');
-        const selectAllBtn = document.getElementById('selectAllBtn');
-        
-        if (this.selectedPhotos.size > 0) {
-            btn.textContent = `Delete Selected (${this.selectedPhotos.size})`;
-            btn.disabled = false;
-        } else {
-            btn.textContent = 'Delete Selected';
-            btn.disabled = true;
-        }
-        
-        const selectedCollection = document.getElementById('viewCollection').value;
-        let photosToShow = this.photos;
-        if (selectedCollection) {
-            photosToShow = this.photos.filter(photo => photo.collection_id == selectedCollection);
-        }
-        
-        if (this.selectedPhotos.size === photosToShow.length && photosToShow.length > 0) {
-            selectAllBtn.textContent = 'Deselect All';
-        } else {
-            selectAllBtn.textContent = 'Select All';
-        }
-    }
-    
-    async deleteSelectedPhotos() {
+    async massDeletePhotos() {
         if (this.selectedPhotos.size === 0) return;
         
-        if (!confirm(`Are you sure you want to delete ${this.selectedPhotos.size} selected photos? This cannot be undone.`)) {
+        if (!confirm(`Are you sure you want to delete ${this.selectedPhotos.size} selected photos?`)) {
             return;
         }
         
         try {
-            const photoIds = Array.from(this.selectedPhotos);
+            const response = await fetch('/api/photos/bulk-delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ photo_ids: Array.from(this.selectedPhotos) })
+            });
             
-            for (const photoId of photoIds) {
-                await fetch(`/api/photos/${photoId}`, { method: 'DELETE' });
+            const data = await response.json();
+            
+            if (data.success) {
+                this.selectedPhotos.clear();
+                this.toggleSelectMode();
+                await this.loadData();
+                this.showNotification(`Deleted ${data.deleted_count} photos`, 'success');
+            } else {
+                this.showNotification(data.message, 'error');
             }
-            
-            this.selectedPhotos.clear();
-            this.showNotification(`${photoIds.length} photos deleted successfully!`, 'success');
-            
-            await this.loadPhotos();
         } catch (error) {
             console.error('Error deleting photos:', error);
             this.showNotification('Failed to delete photos', 'error');
         }
     }
     
-    viewPhoto(imageUrl, title, photoId = null) {
+    viewPhoto(id, url, filename) {
+        if (this.selectMode) return;
+        
+        this.currentPhoto = { id, url, filename };
+        
         const modal = document.getElementById('photoModal');
-        const modalImg = document.getElementById('modalImage');
-        const modalTitle = document.getElementById('modalTitle');
-        const downloadBtn = document.getElementById('downloadBtn');
+        const modalImage = document.getElementById('modalImage');
         
-        modalImg.src = imageUrl;
-        modalTitle.textContent = title;
-        this.currentPhotoId = photoId;
-        
-        // Setup download
-        downloadBtn.onclick = () => this.downloadPhoto(imageUrl);
-        
+        modalImage.src = url;
+        modalImage.alt = filename;
         modal.classList.remove('hidden');
     }
     
-    closeModal() {
-        document.getElementById('photoModal').classList.add('hidden');
-        this.currentPhotoId = null;
-    }
-    
-    downloadPhoto(imageUrl) {
-        const link = document.createElement('a');
-        link.href = imageUrl;
-        link.download = 'photo.jpg';
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    showMovePhotoModal() {
+        this.closeModal('photoModal');
+        this.showModal('movePhotoModal');
     }
     
     async movePhoto() {
-        const newCollectionId = document.getElementById('moveToCollection').value;
+        const newCollection = document.getElementById('moveToCollection').value;
         
-        if (!newCollectionId || !this.currentPhotoId) {
-            this.showNotification('Please select a collection', 'error');
-            return;
-        }
+        if (!this.currentPhoto) return;
         
         try {
-            const response = await fetch(`/api/photos/${this.currentPhotoId}/move`, {
+            const response = await fetch(`/api/photos/${this.currentPhoto.id}/move`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ collection_id: newCollectionId })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ collection_name: newCollection || null })
             });
             
             const data = await response.json();
             
             if (data.success) {
-                this.showNotification('Photo moved successfully!', 'success');
-                this.closeModal();
-                await this.loadPhotos();
+                this.closeModal('movePhotoModal');
+                await this.loadData();
+                this.showNotification('Photo moved successfully', 'success');
             } else {
-                this.showNotification(data.message || 'Failed to move photo', 'error');
+                this.showNotification(data.message, 'error');
             }
         } catch (error) {
             console.error('Error moving photo:', error);
@@ -495,26 +466,26 @@ class AdminPanel {
         }
     }
     
-    async deletePhoto() {
-        if (!this.currentPhotoId) return;
+    async deleteCurrentPhoto() {
+        if (!this.currentPhoto) return;
         
-        if (!confirm('Are you sure you want to delete this photo? This cannot be undone.')) {
+        if (!confirm('Are you sure you want to delete this photo?')) {
             return;
         }
         
         try {
-            const response = await fetch(`/api/photos/${this.currentPhotoId}`, {
+            const response = await fetch(`/api/photos/${this.currentPhoto.id}`, {
                 method: 'DELETE'
             });
             
             const data = await response.json();
             
             if (data.success) {
-                this.showNotification('Photo deleted successfully!', 'success');
-                this.closeModal();
-                await this.loadPhotos();
+                this.closeModal('photoModal');
+                await this.loadData();
+                this.showNotification('Photo deleted successfully', 'success');
             } else {
-                this.showNotification(data.message || 'Failed to delete photo', 'error');
+                this.showNotification(data.message, 'error');
             }
         } catch (error) {
             console.error('Error deleting photo:', error);
@@ -522,23 +493,57 @@ class AdminPanel {
         }
     }
     
-    showNotification(message, type = 'success') {
-        // Remove existing notifications
-        const existing = document.querySelectorAll('.notification');
-        existing.forEach(n => n.remove());
+    async downloadCurrentPhoto() {
+        if (!this.currentPhoto) return;
         
+        try {
+            const response = await fetch(this.currentPhoto.url);
+            const blob = await response.blob();
+            
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = this.currentPhoto.filename || 'photo.jpg';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error downloading photo:', error);
+            this.showNotification('Failed to download photo', 'error');
+        }
+    }
+    
+    showModal(modalId) {
+        document.getElementById(modalId).classList.remove('hidden');
+    }
+    
+    closeModal(modalId) {
+        document.getElementById(modalId).classList.add('hidden');
+    }
+    
+    showNotification(message, type = 'info') {
+        // Create notification element
         const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
+        notification.className = `notification ${type === 'success' ? 'success-message' : 'error-message'}`;
         notification.textContent = message;
+        notification.style.position = 'fixed';
+        notification.style.top = '20px';
+        notification.style.right = '20px';
+        notification.style.zIndex = '10001';
+        notification.style.maxWidth = '300px';
         
         document.body.appendChild(notification);
         
+        // Remove after 3 seconds
         setTimeout(() => {
-            notification.remove();
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
         }, 3000);
     }
 }
 
-// Initialize admin panel
-const adminPanel = new AdminPanel();
+// Initialize admin panel when page loads
+const admin = new AdminPanel();
 
