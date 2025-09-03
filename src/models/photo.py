@@ -254,8 +254,8 @@ class CloudinaryCollectionManager:
     def get_all_collections():
         """Get all collections from Cloudinary folders"""
         try:
-            # Get all folders from Cloudinary
-            result = cloudinary.api.folders()
+            # Get all root folders from Cloudinary
+            result = cloudinary.api.root_folders()
             folders = result.get('folders', [])
             
             collections = []

@@ -17,8 +17,8 @@
                 <span class="nav-title">Gallery</span>
             </div>
             <div class="nav-actions">
-                <button id="galleryBtn" class="nav-btn active" onclick="photoGallery.showGallery()">Gallery</button>
-                <button id="adminBtn" class="nav-btn" onclick="photoGallery.toggleAdmin()">Admin</button>
+                <button id="galleryBtn" class="nav-btn active">Gallery</button>
+                <a href="/admin" class="nav-btn">Admin</a>
             </div>
         </div>
     </nav>
@@ -37,11 +37,6 @@
                 <div id="collectionsContainer" class="collections-container">
                     <div class="section-header">
                         <h2 class="section-title">Collections</h2>
-                        <div class="section-actions">
-                            <button id="massDeleteBtn" class="btn btn-danger hidden" onclick="photoGallery.toggleMassDelete()">
-                                <span>🗑️</span> Mass Delete
-                            </button>
-                        </div>
                     </div>
                     <div id="collectionsGrid" class="collections-grid"></div>
                 </div>
@@ -64,54 +59,6 @@
                     </div>
                 </div>
                 <div id="collectionPhotosGrid" class="photos-grid"></div>
-            </section>
-
-            <!-- Admin Panel -->
-            <section id="adminPanel" class="admin-panel hidden">
-                <div class="admin-container">
-                    <!-- Login Form -->
-                    <div id="loginForm" class="admin-card">
-                        <h3 class="admin-title">Admin Access</h3>
-                        <div class="form-group">
-                            <input type="password" id="adminPassword" class="form-input" placeholder="Enter admin password">
-                        </div>
-                        <button id="loginBtn" class="btn btn-primary" onclick="photoGallery.login()">Login</button>
-                    </div>
-
-                    <!-- Admin Dashboard -->
-                    <div id="adminDashboard" class="admin-dashboard hidden">
-                        <!-- Collection Management -->
-                        <div class="admin-card">
-                            <h3 class="admin-title">Create Collection</h3>
-                            <div class="form-group">
-                                <input type="text" id="collectionNameInput" class="form-input" placeholder="Collection name">
-                            </div>
-                            <button id="createCollectionBtn" class="btn btn-primary" onclick="photoGallery.createCollection()">
-                                Create Collection
-                            </button>
-                        </div>
-
-                        <!-- Photo Upload -->
-                        <div class="admin-card">
-                            <h3 class="admin-title">Upload Photos</h3>
-                            <div class="form-group">
-                                <select id="collectionSelect" class="form-select">
-                                    <option value="">Select Collection</option>
-                                </select>
-                            </div>
-                            <div id="uploadArea" class="upload-area">
-                                <div class="upload-icon">📷</div>
-                                <div class="upload-text">Drag and drop photos here</div>
-                                <div class="upload-subtext">or click to select files</div>
-                                <div class="upload-formats">Supports: JPG, PNG, GIF, WebP, HEIC</div>
-                            </div>
-                            <input type="file" id="fileInput" multiple accept="image/*,.heic,.heif" class="hidden">
-                            <button id="uploadBtn" class="btn btn-primary" onclick="photoGallery.uploadPhotos()">
-                                Upload Photos
-                            </button>
-                        </div>
-                    </div>
-                </div>
             </section>
         </div>
     </main>
@@ -143,17 +90,6 @@
                     <button id="downloadBtn" class="btn btn-primary">
                         <span>⬇️</span> Download
                     </button>
-                    <div id="adminPhotoActions" class="admin-photo-actions hidden">
-                        <select id="moveToCollectionSelect" class="form-select">
-                            <option value="">Move to Collection...</option>
-                        </select>
-                        <button id="removeFromCollectionBtn" class="btn btn-secondary">
-                            <span>📁</span> Remove from Collection
-                        </button>
-                        <button id="deletePhotoBtn" class="btn btn-danger">
-                            <span>🗑️</span> Delete Photo
-                        </button>
-                    </div>
                 </div>
             </div>
         </div>

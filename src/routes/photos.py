@@ -8,6 +8,7 @@ from PIL import Image
 import io
 import tempfile
 from ..models.photo import Photo
+from ..routes.auth import require_admin_auth
 
 photos_bp = Blueprint('photos', __name__)
 
@@ -76,6 +77,7 @@ def get_photos():
         }), 500
 
 @photos_bp.route('/api/photos/upload', methods=['POST'])
+@require_admin_auth
 def upload_photo():
     try:
         if 'photo' not in request.files:
@@ -173,6 +175,7 @@ def upload_photo():
         }), 500
 
 @photos_bp.route('/api/photos/<int:photo_id>/move', methods=['PUT'])
+@require_admin_auth
 def move_photo(photo_id):
     try:
         data = request.get_json()
@@ -208,7 +211,8 @@ def move_photo(photo_id):
         }), 500
 
 @photos_bp.route('/api/photos/<int:photo_id>/remove', methods=['PUT'])
-def remove_photo_from_collection(photo_id):
+@require_admin_auth
+def remove_from_collection(photo_id):
     try:
         photo = Photo.get_by_id(photo_id)
         if not photo:
@@ -240,6 +244,7 @@ def remove_photo_from_collection(photo_id):
         }), 500
 
 @photos_bp.route('/api/photos/<int:photo_id>', methods=['DELETE'])
+@require_admin_auth
 def delete_photo(photo_id):
     try:
         photo = Photo.get_by_id(photo_id)

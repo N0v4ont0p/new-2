@@ -52,9 +52,17 @@ def serve(path):
     if static_folder_path is None:
         return "Static folder not configured", 404
 
+    # Serve admin page
+    if path == 'admin' or path.startswith('admin/'):
+        admin_path = os.path.join(static_folder_path, 'admin.html')
+        if os.path.exists(admin_path):
+            return send_from_directory(static_folder_path, 'admin.html')
+    
+    # Serve other static files
     if path != "" and os.path.exists(os.path.join(static_folder_path, path)):
         return send_from_directory(static_folder_path, path)
     else:
+        # Serve main gallery page
         index_path = os.path.join(static_folder_path, 'index.html')
         if os.path.exists(index_path):
             return send_from_directory(static_folder_path, 'index.html')

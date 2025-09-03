@@ -3,8 +3,8 @@ import os
 
 auth_bp = Blueprint('auth', __name__)
 
-# Admin password (hardcoded as requested)
-ADMIN_PASSWORD = "Hanshow99@"
+# Admin password from environment variable
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'Hanshow99@')
 
 @auth_bp.route('/auth/login', methods=['POST'])
 def login():
