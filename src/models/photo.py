@@ -245,3 +245,139 @@ class Photo:
         
         return row[0] if row else None
 
+
+
+class CloudinaryCollectionManager:
+    """Manager class for Cloudinary collections (folders)"""
+    
+    @staticmethod
+    def get_all_collections():
+        """Get all collections from Cloudinary folders"""
+        try:
+            # Get all folders from Cloudinary
+            result = cloudinary.api.folders()
+            folders = result.get('folders', [])
+            
+            collections = []
+            for folder in folders:
+                folder_name = folder['name']
+                # Get preview image for the collection
+                preview_url = Photo.get_collection_preview(folder_name)
+                # Count photos in collection
+                photos = Photo.get_by_collection(folder_name)
+                photo_count = len(photos)
+                
+                collections.append({
+                    'id': folder_name,
+                    'name': folder_name.replace('_', ' ').title(),
+                    'preview_url': preview_url,
+                    'photo_count': photo_count
+                })
+            
+            return collections
+            
+        except Exception as e:
+            print(f"Error getting collections from Cloudinary: {e}")
+            return []
+    
+    @staticmethod
+    def create_collection(name):
+        """Create a new collection (folder) in Cloudinary"""
+        try:
+            # Convert name to folder-safe format
+            folder_name = name.lower().replace(' ', '_').replace('-', '_')
+            folder_name = ''.join(c for c in folder_name if c.isalnum() or c == '_')
+            
+            # Create folder by uploading a placeholder (Cloudinary creates folders when files are uploaded)
+            # We'll create the folder structure, but it will only appear when photos are added
+            
+            return {
+                'id': folder_name,
+                'name': name,
+                'preview_url': None,
+                'photo_count': 0
+            }
+            
+        except Exception as e:
+            print(f"Error creating collection: {e}")
+            raise e
+    
+    @staticmethod
+    def delete_collection(collection_id):
+        """Delete a collection and all its photos"""
+        try:
+            # Get all photos in the collection
+            photos = Photo.get_by_collection(collection_id)
+            
+            # Delete each photo from Cloudinary
+            for photo in photos:
+                try:
+                    cloudinary.api.delete_resources([photo.cloudinary_public_id])
+                except Exception as e:
+                    print(f"Error deleting photo {photo.cloudinary_public_id}: {e}")
+            
+            # Delete photos from local database
+            conn = sqlite3.connect(Photo.get_db_path())
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM photos WHERE cloudinary_folder = ?', (collection_id,))
+            conn.commit()
+            conn.close()
+            
+            # Try to delete the folder from Cloudinary
+            try:
+                cloudinary.api.delete_folder(collection_id)
+            except Exception as e:
+                print(f"Error deleting folder from Cloudinary: {e}")
+                # Folder deletion might fail if it's not empty, but that's okay
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error deleting collection: {e}")
+            return False
+    
+    @staticmethod
+    def get_collection_by_id(collection_id):
+        """Get collection details by ID"""
+        try:
+            # Check if collection exists by looking for photos in it
+            photos = Photo.get_by_collection(collection_id)
+            
+            if photos or collection_id:  # Allow empty collections
+                preview_url = Photo.get_collection_preview(collection_id)
+                return {
+                    'id': collection_id,
+                    'name': collection_id.replace('_', ' ').title(),
+                    'preview_url': preview_url,
+                    'photo_count': len(photos)
+                }
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error getting collection: {e}")
+            return None
+    
+    @staticmethod
+    def get_collection_photos(collection_id):
+        """Get all photos in a collection"""
+        try:
+            photos = Photo.get_by_collection(collection_id)
+            return [{
+                'id': photo.id,
+                'filename': photo.filename,
+                'cloudinary_public_id': photo.cloudinary_public_id,
+                'cloudinary_secure_url': photo.cloudinary_secure_url,
+                'cloudinary_folder': photo.cloudinary_folder,
+                'created_at': photo.created_at.isoformat() if photo.created_at else None
+            } for photo in photos]
+            
+        except Exception as e:
+            print(f"Error getting collection photos: {e}")
+            return []
+    
+    @staticmethod
+    def sync_photos_from_cloudinary():
+        """Sync photos from Cloudinary - wrapper for Photo.sync_from_cloudinary"""
+        Photo.sync_from_cloudinary()
+

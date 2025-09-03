@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from flask import Flask, send_from_directory
 from flask_cors import CORS
-from src.models.photo import db
+from src.models.user import db
 from src.routes.auth import auth_bp
 from src.routes.photos import photos_bp
 from src.routes.collections import collections_bp
@@ -41,8 +41,8 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
     # Sync photos from Cloudinary on startup to restore after server restarts
-    from src.models.photo import CloudinaryCollectionManager
-    CloudinaryCollectionManager.sync_photos_from_cloudinary()
+    from src.models.photo import Photo
+    Photo.init_db()
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

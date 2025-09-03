@@ -286,7 +286,7 @@ class PhotoGallery {
         const photosHTML = this.photos.map(photo => `
             <div class="photo-item" onclick="photoGallery.viewPhoto('${photo.cloudinary_secure_url}', '${photo.filename || 'Photo'}', ${photo.id})">
                 <img src="${photo.cloudinary_secure_url}" alt="Photo" loading="lazy">
-                ${this.isLoggedIn ? `
+                ${this.isLoggedIn && this.massDeleteMode ? `
                     <div class="photo-checkbox ${this.selectedPhotos.has(photo.id) ? 'checked' : ''}" 
                          onclick="event.stopPropagation(); photoGallery.togglePhotoSelection(${photo.id})">
                         ${this.selectedPhotos.has(photo.id) ? '✓' : ''}
@@ -365,6 +365,31 @@ class PhotoGallery {
             this.showNotification('Failed to delete photos', 'error');
         } finally {
             this.hideLoading();
+        }
+    }
+    
+    toggleMassDelete() {
+        this.massDeleteMode = !this.massDeleteMode;
+        const massDeleteBtn = document.getElementById('massDeleteBtn');
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+        
+        if (this.massDeleteMode) {
+            massDeleteBtn.textContent = '✓ Exit Mass Delete';
+            massDeleteBtn.classList.add('active');
+            selectAllBtn.classList.remove('hidden');
+            deleteSelectedBtn.classList.remove('hidden');
+        } else {
+            massDeleteBtn.textContent = '🗑️ Mass Delete';
+            massDeleteBtn.classList.remove('active');
+            selectAllBtn.classList.add('hidden');
+            deleteSelectedBtn.classList.add('hidden');
+            this.selectedPhotos.clear();
+        }
+        
+        // Re-render photos to show/hide selection checkboxes
+        if (this.currentView === 'collection') {
+            this.renderCollectionPhotos();
         }
     }
     
