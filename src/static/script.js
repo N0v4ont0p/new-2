@@ -13,11 +13,11 @@ class PhotoGallery {
     }
     
     async init() {
-        this.showLoading();
+        
         await this.checkAuthStatus();
         await this.loadCollections();
         this.setupEventListeners();
-        this.hideLoading();
+        
     }
     
     // Authentication
@@ -208,7 +208,7 @@ class PhotoGallery {
     // Collection View
     async viewCollection(collectionId) {
         try {
-            this.showLoading();
+            
             const response = await fetch(`/api/photos?collection_id=${collectionId}`);
             const data = await response.json();
             
@@ -231,7 +231,7 @@ class PhotoGallery {
             console.error('Error loading collection:', error);
             this.showNotification('Failed to load collection', 'error');
         } finally {
-            this.hideLoading();
+            
         }
     }
     
@@ -348,7 +348,7 @@ class PhotoGallery {
         }
         
         try {
-            this.showLoading();
+            
             const photoIds = Array.from(this.selectedPhotos);
             
             for (const photoId of photoIds) {
@@ -364,7 +364,7 @@ class PhotoGallery {
             console.error('Error deleting photos:', error);
             this.showNotification('Failed to delete photos', 'error');
         } finally {
-            this.hideLoading();
+            
         }
     }
     
@@ -539,7 +539,7 @@ class PhotoGallery {
         const collectionId = collectionSelect.value || null;
         
         try {
-            this.showLoading();
+            
             let successCount = 0;
             
             for (const file of files) {
@@ -575,7 +575,7 @@ class PhotoGallery {
             console.error('Upload error:', error);
             this.showNotification('Failed to upload photos', 'error');
         } finally {
-            this.hideLoading();
+            
         }
     }
     
@@ -712,13 +712,7 @@ class PhotoGallery {
         }
     }
     
-    showLoading() {
-        document.getElementById('loadingOverlay').classList.remove('hidden');
-    }
-    
-    hideLoading() {
-        document.getElementById('loadingOverlay').classList.add('hidden');
-    }
+    // Removed loading functions - no more loading overlay
     
     showNotification(message, type = 'info') {
         // Create notification element
