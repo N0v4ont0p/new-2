@@ -6,118 +6,129 @@
     <title>Photo Gallery</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="apple-touch-icon" href="/favicon.ico">
-    <link rel="shortcut icon" href="/favicon.ico">
-    <link rel="stylesheet" href="styles.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-    <!-- Header -->
-    <header class="header">
-        <div class="header-content">
-            <div class="logo">
-                <span class="logo-icon">📸</span>
-                <h1>Photo Gallery</h1>
+    <!-- Apple-style Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="nav-logo">📸</span>
+                <span class="nav-title">Gallery</span>
             </div>
-            <nav class="nav-buttons">
-                <button id="galleryBtn" class="nav-btn active">Gallery</button>
-                <button id="adminBtn" class="nav-btn">Admin</button>
-                <button id="logoutBtn" class="nav-btn hidden">Logout</button>
-            </nav>
+            <div class="nav-actions">
+                <button id="galleryBtn" class="nav-btn active" onclick="photoGallery.showGallery()">Gallery</button>
+                <button id="adminBtn" class="nav-btn" onclick="photoGallery.toggleAdmin()">Admin</button>
+            </div>
         </div>
-    </header>
+    </nav>
 
-    <!-- Main Container -->
-    <div class="container">
-        <!-- Gallery Section -->
-        <section id="gallerySection" class="section">
-            <div class="section-header">
-                <h2 class="section-title">Photo Gallery</h2>
-                <p class="section-subtitle">Beautiful moments captured and organized</p>
-            </div>
-
-            <!-- Collections Grid -->
-            <div id="collectionsGrid" class="collection-grid">
-                <!-- Collections will be loaded here -->
-            </div>
-
-            <!-- Uncategorized Photos Section -->
-            <div id="uncategorizedSection" class="uncategorized-section hidden">
-                <div class="section-divider">
-                    <h3 class="uncategorized-title">Uncategorized Photos</h3>
-                    <p class="uncategorized-subtitle">Photos not assigned to any collection</p>
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            <!-- Gallery View -->
+            <section id="gallerySection" class="section">
+                <div class="hero-section">
+                    <h1 class="hero-title">Photo Gallery</h1>
+                    <p class="hero-subtitle">Beautiful moments captured and organized</p>
                 </div>
-                <div id="uncategorizedGrid" class="photo-grid">
-                    <!-- Uncategorized photos will be loaded here -->
-                </div>
-            </div>
-
-            <!-- Photos Grid -->
-            <div id="photosGrid" class="photo-grid hidden">
-                <!-- Photos will be loaded here -->
-            </div>
-        </section>
-
-        <!-- Admin Section -->
-        <section id="adminSection" class="section hidden">
-            <!-- Login Form -->
-            <div id="loginForm" class="admin-login">
-                <div class="login-card">
-                    <h2 class="login-title">Admin Login</h2>
-                    <div class="form-group">
-                        <input type="password" id="passwordInput" class="form-input" placeholder="Enter admin password" autocomplete="current-password">
+                
+                <!-- Collections Grid -->
+                <div id="collectionsContainer" class="collections-container">
+                    <div class="section-header">
+                        <h2 class="section-title">Collections</h2>
+                        <div class="section-actions">
+                            <button id="massDeleteBtn" class="btn btn-danger hidden" onclick="photoGallery.toggleMassDelete()">
+                                <span>🗑️</span> Mass Delete
+                            </button>
+                        </div>
                     </div>
-                    <button id="loginBtn" class="btn btn-primary">Login</button>
+                    <div id="collectionsGrid" class="collections-grid"></div>
                 </div>
-            </div>
+            </section>
+
+            <!-- Collection View -->
+            <section id="collectionSection" class="section hidden">
+                <div class="collection-header">
+                    <button class="back-btn" onclick="photoGallery.showGallery()">
+                        <span>←</span> Back to Gallery
+                    </button>
+                    <h1 id="collectionTitle" class="collection-title">Collection</h1>
+                    <div class="collection-actions">
+                        <button id="selectAllBtn" class="btn btn-secondary hidden" onclick="photoGallery.selectAllPhotos()">
+                            Select All
+                        </button>
+                        <button id="deleteSelectedBtn" class="btn btn-danger hidden" onclick="photoGallery.deleteSelectedPhotos()">
+                            Delete Selected
+                        </button>
+                    </div>
+                </div>
+                <div id="collectionPhotosGrid" class="photos-grid"></div>
+            </section>
 
             <!-- Admin Panel -->
-            <div id="adminPanel" class="admin-panel hidden">
-                <div class="section-header">
-                    <h2 class="section-title">Admin Panel</h2>
-                    <p class="section-subtitle">Manage your photo collections and uploads</p>
-                </div>
+            <section id="adminPanel" class="admin-panel hidden">
+                <div class="admin-container">
+                    <!-- Login Form -->
+                    <div id="loginForm" class="admin-card">
+                        <h3 class="admin-title">Admin Access</h3>
+                        <div class="form-group">
+                            <input type="password" id="adminPassword" class="form-input" placeholder="Enter admin password">
+                        </div>
+                        <button id="loginBtn" class="btn btn-primary" onclick="photoGallery.login()">Login</button>
+                    </div>
 
-                <!-- Collection Management -->
-                <div class="admin-section">
-                    <h3 class="admin-title">
-                        <span>📁</span>
-                        Collection Management
-                    </h3>
-                    <div class="form-row">
-                        <input type="text" id="collectionNameInput" class="form-input" placeholder="Enter collection name">
-                        <button id="addCollectionBtn" class="btn btn-primary">Add Collection</button>
-                    </div>
-                    <div id="adminCollectionsGrid" class="collection-grid">
-                        <!-- Admin collections will be loaded here -->
+                    <!-- Admin Dashboard -->
+                    <div id="adminDashboard" class="admin-dashboard hidden">
+                        <!-- Collection Management -->
+                        <div class="admin-card">
+                            <h3 class="admin-title">Create Collection</h3>
+                            <div class="form-group">
+                                <input type="text" id="collectionNameInput" class="form-input" placeholder="Collection name">
+                            </div>
+                            <button id="createCollectionBtn" class="btn btn-primary" onclick="photoGallery.createCollection()">
+                                Create Collection
+                            </button>
+                        </div>
+
+                        <!-- Photo Upload -->
+                        <div class="admin-card">
+                            <h3 class="admin-title">Upload Photos</h3>
+                            <div class="form-group">
+                                <select id="collectionSelect" class="form-select">
+                                    <option value="">Select Collection</option>
+                                </select>
+                            </div>
+                            <div id="uploadArea" class="upload-area">
+                                <div class="upload-icon">📷</div>
+                                <div class="upload-text">Drag and drop photos here</div>
+                                <div class="upload-subtext">or click to select files</div>
+                                <div class="upload-formats">Supports: JPG, PNG, GIF, WebP, HEIC</div>
+                            </div>
+                            <input type="file" id="fileInput" multiple accept="image/*,.heic,.heif" class="hidden">
+                            <button id="uploadBtn" class="btn btn-primary" onclick="photoGallery.uploadPhotos()">
+                                Upload Photos
+                            </button>
+                        </div>
                     </div>
                 </div>
+            </section>
+        </div>
+    </main>
 
-                <!-- Photo Upload -->
-                <div class="admin-section">
-                    <h3 class="admin-title">
-                        <span>📤</span>
-                        Photo Upload
-                    </h3>
-                    <div class="form-group">
-                        <label class="form-label">Select Collection (Optional)</label>
-                        <select id="collectionSelect" class="form-select">
-                            <option value="">No Collection</option>
-                        </select>
-                    </div>
-                    <div id="uploadArea" class="upload-area">
-                        <div class="upload-icon">📷</div>
-                        <div class="upload-text">Drag and drop photos here</div>
-                        <div class="upload-subtext">or click to select files</div>
-                        <div class="upload-formats">Supports: JPG, PNG, GIF, WebP, HEIC, and more</div>
-                    </div>
-                    <input type="file" id="fileInput" multiple accept="image/*,.heic,.heif" class="hidden">
-                    <button id="uploadBtn" class="btn btn-primary">Upload Photos</button>
+    <!-- Apple-style Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-content">
+                <p class="footer-text">© 2025 Photo Gallery. Powered by Cloudinary.</p>
+                <div class="footer-links">
+                    <span class="footer-link">Privacy</span>
+                    <span class="footer-link">Terms</span>
+                    <span class="footer-link">Support</span>
                 </div>
             </div>
-        </section>
-    </div>
+        </div>
+    </footer>
 
     <!-- Photo Modal -->
     <div id="photoModal" class="modal">
@@ -130,20 +141,17 @@
                 <img id="modalImage" src="" alt="Photo">
                 <div class="modal-actions">
                     <button id="downloadBtn" class="btn btn-primary">
-                        <span>⬇️</span>
-                        Download
+                        <span>⬇️</span> Download
                     </button>
                     <div id="adminPhotoActions" class="admin-photo-actions hidden">
                         <select id="moveToCollectionSelect" class="form-select">
                             <option value="">Move to Collection...</option>
                         </select>
-                        <button id="uncategorizeBtn" class="btn btn-secondary">
-                            <span>📁</span>
-                            Uncategorize
+                        <button id="removeFromCollectionBtn" class="btn btn-secondary">
+                            <span>📁</span> Remove from Collection
                         </button>
                         <button id="deletePhotoBtn" class="btn btn-danger">
-                            <span>🗑️</span>
-                            Delete
+                            <span>🗑️</span> Delete Photo
                         </button>
                     </div>
                 </div>
@@ -151,10 +159,13 @@
         </div>
     </div>
 
-    <!-- Notification Container -->
-    <div id="notificationContainer" class="notification-container"></div>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Loading...</p>
+    </div>
 
-    <script src="script.js"></script>
+    <script src="/script.js"></script>
 </body>
 </html>
 

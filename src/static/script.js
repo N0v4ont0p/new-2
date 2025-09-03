@@ -1,66 +1,23 @@
-// Photo Gallery Application - Clean and Functional
 class PhotoGallery {
     constructor() {
-        this.currentView = 'gallery';
-        this.isLoggedIn = false;
         this.collections = [];
         this.photos = [];
-        this.selectedCollection = null;
-        this.selectedFiles = [];
+        this.currentView = 'gallery';
+        this.currentCollectionId = null;
+        this.currentPhotoId = null;
+        this.isLoggedIn = false;
+        this.selectedPhotos = new Set();
+        this.massDeleteMode = false;
         
         this.init();
     }
     
-    init() {
+    async init() {
+        this.showLoading();
+        await this.checkAuthStatus();
+        await this.loadCollections();
         this.setupEventListeners();
-        this.checkAuthStatus();
-        this.loadCollections();
-        this.loadPhotos();
-        this.showGalleryView();
-    }
-    
-    setupEventListeners() {
-        // Navigation buttons
-        document.getElementById('galleryBtn').addEventListener('click', () => this.showGalleryView());
-        document.getElementById('adminBtn').addEventListener('click', () => this.showAdminView());
-        document.getElementById('logoutBtn').addEventListener('click', () => this.handleLogout());
-        
-        // Admin login
-        document.getElementById('loginBtn').addEventListener('click', () => this.handleLogin());
-        document.getElementById('passwordInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.handleLogin();
-        });
-        
-        // Collection management
-        document.getElementById('addCollectionBtn').addEventListener('click', () => this.createCollection());
-        document.getElementById('collectionNameInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.createCollection();
-        });
-        
-        // Photo upload
-        document.getElementById('uploadBtn').addEventListener('click', () => this.uploadPhotos());
-        document.getElementById('fileInput').addEventListener('change', (e) => this.handleFileSelect(e));
-        
-        // Drag and drop
-        const uploadArea = document.getElementById('uploadArea');
-        uploadArea.addEventListener('dragover', (e) => this.handleDragOver(e));
-        uploadArea.addEventListener('dragleave', (e) => this.handleDragLeave(e));
-        uploadArea.addEventListener('drop', (e) => this.handleDrop(e));
-        uploadArea.addEventListener('click', () => document.getElementById('fileInput').click());
-        
-        // Modal close
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('modal') || e.target.classList.contains('modal-close')) {
-                this.closeModal();
-            }
-        });
-        
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                this.closeModal();
-            }
-        });
+        this.hideLoading();
     }
     
     // Authentication
@@ -69,159 +26,76 @@ class PhotoGallery {
             const response = await fetch('/api/auth/status');
             const data = await response.json();
             this.isLoggedIn = data.authenticated;
-            
-            if (this.isLoggedIn) {
-                document.getElementById('logoutBtn').classList.remove('hidden');
-            }
+            this.updateAuthUI();
         } catch (error) {
-            console.error('Error checking auth status:', error);
+            console.error('Auth check failed:', error);
+            this.isLoggedIn = false;
+            this.updateAuthUI();
         }
     }
     
-    async handleLogin() {
-        const password = document.getElementById('passwordInput').value;
-        
+    async login() {
+        const password = document.getElementById('adminPassword').value;
         if (!password) {
-            this.showNotification('Please enter a password', 'error');
+            this.showNotification('Please enter password', 'error');
             return;
         }
         
         try {
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password })
             });
             
             const data = await response.json();
-            
             if (data.success) {
                 this.isLoggedIn = true;
+                this.updateAuthUI();
                 this.showNotification('Login successful!', 'success');
-                
-                document.getElementById('loginForm').classList.add('hidden');
-                document.getElementById('adminPanel').classList.remove('hidden');
-                document.getElementById('logoutBtn').classList.remove('hidden');
-                
-                this.loadCollections();
-                this.loadPhotos();
+                document.getElementById('adminPassword').value = '';
             } else {
-                this.showNotification(data.error || 'Login failed', 'error');
+                this.showNotification('Invalid password', 'error');
             }
         } catch (error) {
-            console.error('Login error:', error);
-            this.showNotification('Login failed. Please try again.', 'error');
+            console.error('Login failed:', error);
+            this.showNotification('Login failed', 'error');
         }
     }
     
-    async handleLogout() {
+    async logout() {
         try {
-            const response = await fetch('/api/auth/logout', {
-                method: 'POST'
-            });
-            
-            if (response.ok) {
-                this.isLoggedIn = false;
-                this.showNotification('Logged out successfully', 'success');
-                
-                document.getElementById('loginForm').classList.remove('hidden');
-                document.getElementById('adminPanel').classList.add('hidden');
-                document.getElementById('logoutBtn').classList.add('hidden');
-                document.getElementById('passwordInput').value = '';
-                
-                // Switch to gallery view
-                this.showGalleryView();
-            }
+            await fetch('/api/auth/logout', { method: 'POST' });
+            this.isLoggedIn = false;
+            this.updateAuthUI();
+            this.showNotification('Logged out successfully', 'success');
         } catch (error) {
-            console.error('Logout error:', error);
+            console.error('Logout failed:', error);
         }
     }
     
-    // View Management
-    showGalleryView() {
-        this.currentView = 'gallery';
-        this.updateNavigation();
-        
-        document.getElementById('gallerySection').classList.remove('hidden');
-        document.getElementById('adminSection').classList.add('hidden');
-        
-        if (this.selectedCollection) {
-            this.showCollectionView();
-        } else {
-            this.showMainGallery();
-        }
-    }
-    
-    showMainGallery() {
-        this.selectedCollection = null;
-        
-        // Update gallery title
-        const galleryTitle = document.querySelector('#gallerySection .section-title');
-        galleryTitle.textContent = 'Photo Gallery';
-        
-        const gallerySubtitle = document.querySelector('#gallerySection .section-subtitle');
-        gallerySubtitle.textContent = 'Beautiful moments captured and organized';
-        
-        // Show collections grid, hide photos grid
-        document.getElementById('collectionsGrid').classList.remove('hidden');
-        document.getElementById('photosGrid').classList.add('hidden');
-        
-        this.loadCollections();
-    }
-    
-    showCollectionView() {
-        const collection = this.collections.find(c => c.id === this.selectedCollection);
-        if (!collection) return;
-        
-        // Update gallery title
-        const galleryTitle = document.querySelector('#gallerySection .section-title');
-        galleryTitle.textContent = collection.name;
-        
-        const gallerySubtitle = document.querySelector('#gallerySection .section-subtitle');
-        gallerySubtitle.innerHTML = `
-            <button class="btn btn-secondary" onclick="photoGallery.showMainGallery()" style="margin-bottom: 16px;">
-                ← Back to Collections
-            </button>
-            <br>
-            ${collection.photo_count} ${collection.photo_count === 1 ? 'photo' : 'photos'} in this collection
-        `;
-        
-        // Hide collections grid, show photos grid
-        document.getElementById('collectionsGrid').classList.add('hidden');
-        document.getElementById('photosGrid').classList.remove('hidden');
-        
-        this.loadPhotos(this.selectedCollection);
-    }
-    
-    showAdminView() {
-        if (!this.isLoggedIn) {
-            document.getElementById('loginForm').classList.remove('hidden');
-            document.getElementById('adminPanel').classList.add('hidden');
-        } else {
-            document.getElementById('loginForm').classList.add('hidden');
-            document.getElementById('adminPanel').classList.remove('hidden');
-        }
-        
-        this.currentView = 'admin';
-        this.updateNavigation();
-        
-        document.getElementById('gallerySection').classList.add('hidden');
-        document.getElementById('adminSection').classList.remove('hidden');
+    updateAuthUI() {
+        const loginForm = document.getElementById('loginForm');
+        const adminDashboard = document.getElementById('adminDashboard');
+        const adminPhotoActions = document.getElementById('adminPhotoActions');
+        const massDeleteBtn = document.getElementById('massDeleteBtn');
+        const collectionActions = document.querySelectorAll('.collection-actions');
         
         if (this.isLoggedIn) {
-            this.loadCollections();
-            this.loadPhotos();
+            loginForm.classList.add('hidden');
+            adminDashboard.classList.remove('hidden');
+            adminPhotoActions.classList.remove('hidden');
+            massDeleteBtn.classList.remove('hidden');
+            collectionActions.forEach(action => action.classList.remove('hidden'));
+        } else {
+            loginForm.classList.remove('hidden');
+            adminDashboard.classList.add('hidden');
+            adminPhotoActions.classList.add('hidden');
+            massDeleteBtn.classList.add('hidden');
+            collectionActions.forEach(action => action.classList.add('hidden'));
         }
-    }
-    
-    updateNavigation() {
-        const galleryBtn = document.getElementById('galleryBtn');
-        const adminBtn = document.getElementById('adminBtn');
         
-        galleryBtn.classList.toggle('active', this.currentView === 'gallery');
-        adminBtn.classList.toggle('active', this.currentView === 'admin');
+        this.updateCollectionOptions();
     }
     
     // Collections Management
@@ -237,248 +111,70 @@ class PhotoGallery {
             }
         } catch (error) {
             console.error('Error loading collections:', error);
+            this.showNotification('Failed to load collections', 'error');
         }
     }
     
     renderCollections() {
-        const galleryGrid = document.getElementById('collectionsGrid');
-        const adminGrid = document.getElementById('adminCollectionsGrid');
+        const grid = document.getElementById('collectionsGrid');
         
         if (this.collections.length === 0) {
-            const emptyState = `
+            grid.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">📁</div>
                     <h3 class="empty-state-title">No Collections Yet</h3>
                     <p class="empty-state-text">Create your first collection to organize your photos</p>
                 </div>
             `;
-            galleryGrid.innerHTML = emptyState;
-            if (adminGrid) adminGrid.innerHTML = emptyState;
-        } else {
-            const collectionsHTML = this.collections.map(collection => `
-                <div class="collection-card" onclick="photoGallery.viewCollection('${collection.id}')">
-                    <h3 class="collection-name">${this.escapeHtml(collection.name)}</h3>
-                    <p class="collection-count">
-                        <span>📸</span>
-                        Collection
-                    </p>
-                </div>
-            `).join('');
-            
-            galleryGrid.innerHTML = collectionsHTML;
-            
-            if (adminGrid) {
-                const adminCollectionsHTML = this.collections.map(collection => `
-                    <div class="collection-card">
-                        <h3 class="collection-name">${this.escapeHtml(collection.name)}</h3>
-                        <p class="collection-count">
-                            <span>📸</span>
-                            Collection
-                        </p>
-                        <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center;">
-                            <button class="btn btn-secondary" onclick="photoGallery.viewCollection('${collection.id}')">
-                                View Photos
-                            </button>
-                            <button class="btn btn-danger" onclick="photoGallery.deleteCollection('${collection.id}')">
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                `).join('');
-                
-                adminGrid.innerHTML = adminCollectionsHTML;
-            }
+            return;
         }
         
-        // Handle uncategorized photos separately
-        this.renderUncategorizedPhotos();
-    }
-    
-    renderUncategorizedPhotos() {
-        // Load all photos to check for uncategorized ones
-        fetch('/api/photos')
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const uncategorizedPhotos = data.photos.filter(photo => 
-                        photo &&
-                        photo.id &&
-                        photo.cloudinary_secure_url &&
-                        photo.cloudinary_secure_url !== 'undefined' &&
-                        photo.cloudinary_secure_url.startsWith('http') &&
-                        (!photo.cloudinary_folder || photo.cloudinary_folder === 'uncategorized')
-                    );
-                    
-                    const uncategorizedSection = document.getElementById('uncategorizedSection');
-                    const uncategorizedGrid = document.getElementById('uncategorizedGrid');
-                    
-                    if (uncategorizedPhotos.length > 0) {
-                        uncategorizedSection.classList.remove('hidden');
-                        
-                        const photosHTML = uncategorizedPhotos.map(photo => `
-                            <div class="photo-item" onclick="photoGallery.viewPhoto('${photo.cloudinary_secure_url}', 'Photo', ${photo.id})">
-                                <img src="${photo.cloudinary_secure_url}" alt="Photo" loading="lazy">
-                            </div>
-                        `).join('');
-                        
-                        uncategorizedGrid.innerHTML = photosHTML;
-                    } else {
-                        uncategorizedSection.classList.add('hidden');
+        const collectionsHTML = this.collections.map(collection => `
+            <div class="collection-card" onclick="photoGallery.viewCollection('${collection.id}')">
+                <div class="collection-preview">
+                    ${collection.preview_image ? 
+                        `<img src="${collection.preview_image}" alt="${collection.name}">` : 
+                        '📷'
                     }
-                }
-            })
-            .catch(error => {
-                console.error('Error loading uncategorized photos:', error);
-            });
-    }
-    
-    async viewCollection(collectionId) {
-        try {
-            // Load ONLY photos from this specific collection
-            const response = await fetch(`/api/photos?collection_id=${collectionId}`);
-            const data = await response.json();
-            
-            if (data.success) {
-                // STRICT filtering - only photos that belong to this exact collection
-                this.photos = data.photos.filter(photo => 
-                    photo &&
-                    photo.id &&
-                    photo.cloudinary_secure_url &&
-                    photo.cloudinary_secure_url !== 'undefined' &&
-                    photo.cloudinary_secure_url.startsWith('http') &&
-                    photo.cloudinary_folder === collectionId && 
-                    photo.cloudinary_folder !== null && 
-                    photo.cloudinary_folder !== undefined &&
-                    photo.cloudinary_folder !== 'uncategorized'
-                );
-                
-                // COMPLETELY HIDE EVERYTHING and show ONLY collection view
-                this.showCollectionPageView(collectionId);
-            }
-        } catch (error) {
-            console.error('Error loading collection:', error);
-            this.showNotification('Failed to load collection', 'error');
-        }
-    }
-    
-    showCollectionPageView(collectionId) {
-        // COMPLETELY HIDE main gallery elements
-        document.getElementById('collectionsGrid').style.display = 'none';
-        document.getElementById('uncategorizedSection').style.display = 'none';
-        document.getElementById('photosGrid').style.display = 'block';
+                </div>
+                <div class="collection-info">
+                    <h3 class="collection-name">${collection.name}</h3>
+                    <p class="collection-meta">Collection</p>
+                </div>
+                ${this.isLoggedIn ? `
+                    <div class="collection-actions">
+                        <button class="collection-delete" onclick="event.stopPropagation(); photoGallery.deleteCollection('${collection.id}')">
+                            ×
+                        </button>
+                    </div>
+                ` : ''}
+            </div>
+        `).join('');
         
-        // Hide admin panel if visible
-        const adminPanel = document.getElementById('adminPanel');
-        if (adminPanel) {
-            adminPanel.style.display = 'none';
-        }
-        
-        // Update header to show collection name and back button
-        const sectionTitle = document.querySelector('.section-title');
-        const sectionSubtitle = document.querySelector('.section-subtitle');
-        
-        if (sectionTitle) {
-            sectionTitle.textContent = collectionId.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-        }
-        if (sectionSubtitle) {
-            sectionSubtitle.innerHTML = `
-                <button onclick="photoGallery.returnToMainGallery()" class="back-button">
-                    ← Back to Gallery
-                </button>
-            `;
-        }
-        
-        // Render ONLY collection photos
-        this.renderPhotos();
-        this.currentView = 'collection';
-        this.currentCollectionId = collectionId;
-    }
-    
-    returnToMainGallery() {
-        // Show main gallery elements again
-        document.getElementById('collectionsGrid').style.display = 'grid';
-        document.getElementById('photosGrid').style.display = 'none';
-        
-        // Show uncategorized section in main gallery
-        const uncategorizedSection = document.getElementById('uncategorizedSection');
-        uncategorizedSection.style.display = 'block';
-        
-        // Show admin panel if logged in
-        if (this.isLoggedIn) {
-            const adminPanel = document.getElementById('adminPanel');
-            if (adminPanel) {
-                adminPanel.style.display = 'block';
-            }
-        }
-        
-        // Reset header
-        const sectionTitle = document.querySelector('.section-title');
-        const sectionSubtitle = document.querySelector('.section-subtitle');
-        
-        if (sectionTitle) {
-            sectionTitle.textContent = 'Photo Gallery';
-        }
-        if (sectionSubtitle) {
-            sectionSubtitle.textContent = 'Beautiful moments captured and organized';
-        }
-        
-        this.currentView = 'gallery';
-        this.currentCollectionId = null;
-        
-        // Reload collections and uncategorized photos
-        this.loadCollections();
-    }
-    
-    updateCollectionOptions() {
-        const select = document.getElementById('collectionSelect');
-        const moveSelect = document.getElementById('moveToCollectionSelect');
-        
-        if (select) {
-            select.innerHTML = '<option value="">No Collection</option>';
-            this.collections.forEach(collection => {
-                const option = document.createElement('option');
-                option.value = collection.id;
-                option.textContent = collection.name;
-                select.appendChild(option);
-            });
-        }
-        
-        if (moveSelect) {
-            moveSelect.innerHTML = '<option value="">Move to Collection...</option>';
-            this.collections.forEach(collection => {
-                const option = document.createElement('option');
-                option.value = collection.id;
-                option.textContent = collection.name;
-                moveSelect.appendChild(option);
-            });
-        }
+        grid.innerHTML = collectionsHTML;
     }
     
     async createCollection() {
         const name = document.getElementById('collectionNameInput').value.trim();
-        
         if (!name) {
-            this.showNotification('Please enter a collection name', 'error');
+            this.showNotification('Please enter collection name', 'error');
             return;
         }
         
         try {
             const response = await fetch('/api/collections', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name })
             });
             
             const data = await response.json();
-            
             if (data.success) {
                 this.showNotification('Collection created successfully!', 'success');
                 document.getElementById('collectionNameInput').value = '';
-                this.loadCollections();
+                await this.loadCollections();
             } else {
-                this.showNotification(data.error || 'Failed to create collection', 'error');
+                this.showNotification(data.message || 'Failed to create collection', 'error');
             }
         } catch (error) {
             console.error('Error creating collection:', error);
@@ -487,7 +183,7 @@ class PhotoGallery {
     }
     
     async deleteCollection(collectionId) {
-        if (!confirm('Are you sure you want to delete this collection? All photos in this collection will be permanently deleted.')) {
+        if (!confirm('Are you sure you want to delete this collection? All photos in it will be permanently deleted.')) {
             return;
         }
         
@@ -497,18 +193,11 @@ class PhotoGallery {
             });
             
             const data = await response.json();
-            
             if (data.success) {
                 this.showNotification('Collection deleted successfully!', 'success');
-                this.loadCollections();
-                this.loadPhotos();
-                
-                // If we're viewing the deleted collection, go back to main gallery
-                if (this.selectedCollection === collectionId) {
-                    this.showMainGallery();
-                }
+                await this.loadCollections();
             } else {
-                this.showNotification(data.error || 'Failed to delete collection', 'error');
+                this.showNotification(data.message || 'Failed to delete collection', 'error');
             }
         } catch (error) {
             console.error('Error deleting collection:', error);
@@ -516,191 +205,244 @@ class PhotoGallery {
         }
     }
     
-    viewCollection(collectionId) {
-        this.selectedCollection = collectionId;
-        
-        if (this.currentView === 'gallery') {
-            this.showCollectionView();
-        } else {
-            // Switch to gallery view and show collection
-            this.showGalleryView();
-        }
-    }
-    
-    // Photos Management
-    async loadPhotos(collectionId = null) {
+    // Collection View
+    async viewCollection(collectionId) {
         try {
-            let url = '/api/photos';
-            if (collectionId && collectionId !== 'uncategorized') {
-                url = `/api/photos?collection_id=${collectionId}`;
-            } else if (collectionId === 'uncategorized') {
-                // Load all photos and filter uncategorized on frontend
-                url = '/api/photos';
-            }
-            
-            const response = await fetch(url);
+            this.showLoading();
+            const response = await fetch(`/api/photos?collection_id=${collectionId}`);
             const data = await response.json();
             
             if (data.success) {
-                if (collectionId === 'uncategorized') {
-                    // Filter uncategorized photos
-                    this.photos = data.photos.filter(photo => !photo.cloudinary_folder || photo.cloudinary_folder === 'uncategorized');
-                } else {
-                    this.photos = data.photos;
-                }
-                this.renderPhotos();
+                // Filter to only photos that belong to this exact collection
+                this.photos = data.photos.filter(photo => 
+                    photo &&
+                    photo.id &&
+                    photo.cloudinary_secure_url &&
+                    photo.cloudinary_secure_url !== 'undefined' &&
+                    photo.cloudinary_secure_url.startsWith('http') &&
+                    photo.cloudinary_folder === collectionId
+                );
                 
-                // Update collection options for photo management
-                this.updateCollectionOptions();
+                this.currentCollectionId = collectionId;
+                this.currentView = 'collection';
+                this.showCollectionView();
             }
         } catch (error) {
-            console.error('Error loading photos:', error);
+            console.error('Error loading collection:', error);
+            this.showNotification('Failed to load collection', 'error');
+        } finally {
+            this.hideLoading();
         }
     }
     
-    renderPhotos() {
-        const photosGrid = document.getElementById('photosGrid');
+    showCollectionView() {
+        // Hide gallery view
+        document.getElementById('gallerySection').classList.add('hidden');
+        document.getElementById('adminPanel').classList.add('hidden');
         
-        // Filter out any undefined or invalid photos
-        const validPhotos = this.photos.filter(photo => 
-            photo && 
-            photo.id && 
-            photo.cloudinary_secure_url &&
-            photo.cloudinary_secure_url !== 'undefined' &&
-            photo.cloudinary_secure_url.startsWith('http')
-        );
+        // Show collection view
+        document.getElementById('collectionSection').classList.remove('hidden');
         
-        if (validPhotos.length === 0) {
-            const emptyState = `
+        // Update navigation
+        document.getElementById('galleryBtn').classList.remove('active');
+        document.getElementById('adminBtn').classList.remove('active');
+        
+        // Update collection title
+        const collection = this.collections.find(c => c.id === this.currentCollectionId);
+        const title = document.getElementById('collectionTitle');
+        if (title && collection) {
+            title.textContent = collection.name;
+        }
+        
+        // Show/hide mass delete controls
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+        
+        if (this.isLoggedIn) {
+            selectAllBtn.classList.remove('hidden');
+            deleteSelectedBtn.classList.remove('hidden');
+        } else {
+            selectAllBtn.classList.add('hidden');
+            deleteSelectedBtn.classList.add('hidden');
+        }
+        
+        this.renderCollectionPhotos();
+    }
+    
+    renderCollectionPhotos() {
+        const grid = document.getElementById('collectionPhotosGrid');
+        
+        if (this.photos.length === 0) {
+            grid.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">📷</div>
-                    <h3 class="empty-state-title">No Photos Yet</h3>
-                    <p class="empty-state-text">Upload your first photos to get started</p>
+                    <h3 class="empty-state-title">No Photos in Collection</h3>
+                    <p class="empty-state-text">Upload photos to this collection to see them here</p>
                 </div>
             `;
-            photosGrid.innerHTML = emptyState;
             return;
         }
         
-        const photosHTML = validPhotos.map(photo => `
-            <div class="photo-item" onclick="photoGallery.viewPhoto('${photo.cloudinary_secure_url}', 'Photo', ${photo.id})">
+        const photosHTML = this.photos.map(photo => `
+            <div class="photo-item" onclick="photoGallery.viewPhoto('${photo.cloudinary_secure_url}', '${photo.filename || 'Photo'}', ${photo.id})">
                 <img src="${photo.cloudinary_secure_url}" alt="Photo" loading="lazy">
+                ${this.isLoggedIn ? `
+                    <div class="photo-checkbox ${this.selectedPhotos.has(photo.id) ? 'checked' : ''}" 
+                         onclick="event.stopPropagation(); photoGallery.togglePhotoSelection(${photo.id})">
+                        ${this.selectedPhotos.has(photo.id) ? '✓' : ''}
+                    </div>
+                ` : ''}
             </div>
         `).join('');
         
-        photosGrid.innerHTML = photosHTML;
+        grid.innerHTML = photosHTML;
     }
     
+    // Photo Management
+    togglePhotoSelection(photoId) {
+        if (this.selectedPhotos.has(photoId)) {
+            this.selectedPhotos.delete(photoId);
+        } else {
+            this.selectedPhotos.add(photoId);
+        }
+        this.renderCollectionPhotos();
+        this.updateDeleteSelectedButton();
+    }
+    
+    selectAllPhotos() {
+        if (this.selectedPhotos.size === this.photos.length) {
+            // Deselect all
+            this.selectedPhotos.clear();
+        } else {
+            // Select all
+            this.photos.forEach(photo => this.selectedPhotos.add(photo.id));
+        }
+        this.renderCollectionPhotos();
+        this.updateDeleteSelectedButton();
+    }
+    
+    updateDeleteSelectedButton() {
+        const btn = document.getElementById('deleteSelectedBtn');
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        
+        if (this.selectedPhotos.size > 0) {
+            btn.textContent = `Delete Selected (${this.selectedPhotos.size})`;
+            btn.disabled = false;
+        } else {
+            btn.textContent = 'Delete Selected';
+            btn.disabled = true;
+        }
+        
+        if (this.selectedPhotos.size === this.photos.length && this.photos.length > 0) {
+            selectAllBtn.textContent = 'Deselect All';
+        } else {
+            selectAllBtn.textContent = 'Select All';
+        }
+    }
+    
+    async deleteSelectedPhotos() {
+        if (this.selectedPhotos.size === 0) return;
+        
+        if (!confirm(`Are you sure you want to delete ${this.selectedPhotos.size} selected photos? This cannot be undone.`)) {
+            return;
+        }
+        
+        try {
+            this.showLoading();
+            const photoIds = Array.from(this.selectedPhotos);
+            
+            for (const photoId of photoIds) {
+                await fetch(`/api/photos/${photoId}`, { method: 'DELETE' });
+            }
+            
+            this.selectedPhotos.clear();
+            this.showNotification(`${photoIds.length} photos deleted successfully!`, 'success');
+            
+            // Reload collection
+            await this.viewCollection(this.currentCollectionId);
+        } catch (error) {
+            console.error('Error deleting photos:', error);
+            this.showNotification('Failed to delete photos', 'error');
+        } finally {
+            this.hideLoading();
+        }
+    }
+    
+    // Photo Modal
     viewPhoto(imageUrl, title, photoId = null) {
         const modal = document.getElementById('photoModal');
         const modalImg = document.getElementById('modalImage');
         const modalTitle = document.getElementById('modalTitle');
         const downloadBtn = document.getElementById('downloadBtn');
-        const adminActions = document.getElementById('adminPhotoActions');
-        const uncategorizeBtn = document.getElementById('uncategorizeBtn');
         
         modalImg.src = imageUrl;
         modalTitle.textContent = title;
+        this.currentPhotoId = photoId;
         
-        // Set up download button to actually download the file
-        downloadBtn.onclick = async () => {
-            try {
-                const response = await fetch(imageUrl);
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `photo_${Date.now()}.jpg`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                window.URL.revokeObjectURL(url);
-                this.showNotification('Photo downloaded successfully!', 'success');
-            } catch (error) {
-                console.error('Download error:', error);
-                this.showNotification('Failed to download photo', 'error');
-            }
-        };
+        // Setup download
+        downloadBtn.onclick = () => this.downloadPhoto(imageUrl);
         
-        // Show admin actions if logged in and photoId is provided
+        // Show admin actions if logged in
         if (this.isLoggedIn && photoId) {
-            adminActions.classList.remove('hidden');
-            this.currentPhotoId = photoId;
-            
-            // Load all photos to find the current photo's details
-            fetch('/api/photos')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const photo = data.photos.find(p => p.id === photoId);
-                        if (photo && (!photo.cloudinary_folder || photo.cloudinary_folder === 'uncategorized')) {
-                            uncategorizeBtn.style.display = 'none';
-                        } else {
-                            uncategorizeBtn.style.display = 'inline-flex';
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading photo details:', error);
-                });
-            
-            this.setupPhotoManagement();
-        } else {
-            adminActions.classList.add('hidden');
+            this.setupPhotoActions(photoId);
         }
         
         modal.classList.add('active');
     }
     
-    setupPhotoManagement() {
-        const moveSelect = document.getElementById('moveToCollectionSelect');
-        const uncategorizeBtn = document.getElementById('uncategorizeBtn');
-        const deleteBtn = document.getElementById('deletePhotoBtn');
-        
-        // Move to collection
-        moveSelect.onchange = async () => {
-            const collectionId = moveSelect.value;
-            if (collectionId && this.currentPhotoId) {
-                await this.movePhotoToCollection(this.currentPhotoId, collectionId);
-                moveSelect.value = '';
-            }
-        };
-        
-        // Uncategorize photo
-        uncategorizeBtn.onclick = async () => {
-            if (this.currentPhotoId) {
-                await this.uncategorizePhoto(this.currentPhotoId);
-            }
-        };
-        
-        // Delete photo
-        deleteBtn.onclick = async () => {
-            if (this.currentPhotoId && confirm('Are you sure you want to delete this photo? This action cannot be undone.')) {
-                await this.deletePhoto(this.currentPhotoId);
-            }
-        };
+    async downloadPhoto(imageUrl) {
+        try {
+            const response = await fetch(imageUrl);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `photo_${Date.now()}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            this.showNotification('Photo downloaded successfully!', 'success');
+        } catch (error) {
+            console.error('Download error:', error);
+            this.showNotification('Failed to download photo', 'error');
+        }
     }
     
-    async movePhotoToCollection(photoId, collectionId) {
+    setupPhotoActions(photoId) {
+        const moveSelect = document.getElementById('moveToCollectionSelect');
+        const removeBtn = document.getElementById('removeFromCollectionBtn');
+        const deleteBtn = document.getElementById('deletePhotoBtn');
+        
+        // Setup move to collection
+        moveSelect.onchange = () => {
+            if (moveSelect.value) {
+                this.movePhotoToCollection(photoId, moveSelect.value);
+            }
+        };
+        
+        // Setup remove from collection
+        removeBtn.onclick = () => this.removePhotoFromCollection(photoId);
+        
+        // Setup delete photo
+        deleteBtn.onclick = () => this.deletePhoto(photoId);
+    }
+    
+    async movePhotoToCollection(photoId, newCollectionId) {
         try {
             const response = await fetch(`/api/photos/${photoId}/move`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ collection_id: collectionId })
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ collection_id: newCollectionId })
             });
             
             const data = await response.json();
-            
             if (data.success) {
                 this.showNotification('Photo moved successfully!', 'success');
                 this.closeModal();
-                this.loadPhotos();
-                this.loadCollections();
-                this.renderUncategorizedPhotos();
+                await this.viewCollection(this.currentCollectionId);
             } else {
-                this.showNotification(data.error || 'Failed to move photo', 'error');
+                this.showNotification(data.message || 'Failed to move photo', 'error');
             }
         } catch (error) {
             console.error('Error moving photo:', error);
@@ -708,45 +450,43 @@ class PhotoGallery {
         }
     }
     
-    async uncategorizePhoto(photoId) {
+    async removePhotoFromCollection(photoId) {
+        if (!confirm('Remove this photo from the collection?')) return;
+        
         try {
-            const response = await fetch(`/api/photos/${photoId}/uncategorize`, {
-                method: 'POST'
+            const response = await fetch(`/api/photos/${photoId}/remove`, {
+                method: 'PUT'
             });
             
             const data = await response.json();
-            
             if (data.success) {
-                this.showNotification('Photo uncategorized successfully!', 'success');
+                this.showNotification('Photo removed from collection!', 'success');
                 this.closeModal();
-                this.loadPhotos();
-                this.loadCollections();
-                this.renderUncategorizedPhotos();
+                await this.viewCollection(this.currentCollectionId);
             } else {
-                this.showNotification(data.error || 'Failed to uncategorize photo', 'error');
+                this.showNotification(data.message || 'Failed to remove photo', 'error');
             }
         } catch (error) {
-            console.error('Error uncategorizing photo:', error);
-            this.showNotification('Failed to uncategorize photo', 'error');
+            console.error('Error removing photo:', error);
+            this.showNotification('Failed to remove photo', 'error');
         }
     }
     
     async deletePhoto(photoId) {
+        if (!confirm('Are you sure you want to permanently delete this photo?')) return;
+        
         try {
             const response = await fetch(`/api/photos/${photoId}`, {
                 method: 'DELETE'
             });
             
             const data = await response.json();
-            
             if (data.success) {
                 this.showNotification('Photo deleted successfully!', 'success');
                 this.closeModal();
-                this.loadPhotos();
-                this.loadCollections();
-                this.renderUncategorizedPhotos();
+                await this.viewCollection(this.currentCollectionId);
             } else {
-                this.showNotification(data.error || 'Failed to delete photo', 'error');
+                this.showNotification(data.message || 'Failed to delete photo', 'error');
             }
         } catch (error) {
             console.error('Error deleting photo:', error);
@@ -755,161 +495,247 @@ class PhotoGallery {
     }
     
     closeModal() {
-        const photoModal = document.getElementById('photoModal');
-        photoModal.classList.remove('active');
+        const modal = document.getElementById('photoModal');
+        modal.classList.remove('active');
         this.currentPhotoId = null;
     }
     
-    // File Upload
-    handleFileSelect(event) {
-        const files = Array.from(event.target.files);
-        this.processFiles(files);
-    }
-    
-    handleDragOver(event) {
-        event.preventDefault();
-        event.currentTarget.classList.add('dragover');
-    }
-    
-    handleDragLeave(event) {
-        event.preventDefault();
-        event.currentTarget.classList.remove('dragover');
-    }
-    
-    handleDrop(event) {
-        event.preventDefault();
-        event.currentTarget.classList.remove('dragover');
-        
-        const files = Array.from(event.dataTransfer.files);
-        this.processFiles(files);
-    }
-    
-    processFiles(files) {
-        const imageFiles = files.filter(file => 
-            file.type.startsWith('image/') || 
-            file.name.toLowerCase().endsWith('.heic') || 
-            file.name.toLowerCase().endsWith('.heif')
-        );
-        
-        if (imageFiles.length === 0) {
-            this.showNotification('Please select image files only', 'error');
-            return;
-        }
-        
-        if (imageFiles.length > 10) {
-            this.showNotification('Maximum 10 files allowed at once', 'error');
-            return;
-        }
-        
-        // Update UI to show selected files
-        const uploadText = document.querySelector('.upload-text');
-        uploadText.textContent = `${imageFiles.length} file${imageFiles.length > 1 ? 's' : ''} selected`;
-        
-        // Store files for upload
-        this.selectedFiles = imageFiles;
-    }
-    
+    // Photo Upload
     async uploadPhotos() {
-        if (!this.selectedFiles || this.selectedFiles.length === 0) {
-            this.showNotification('Please select files first', 'error');
+        const fileInput = document.getElementById('fileInput');
+        const collectionSelect = document.getElementById('collectionSelect');
+        const files = fileInput.files;
+        
+        if (files.length === 0) {
+            this.showNotification('Please select files to upload', 'error');
             return;
         }
         
-        const collectionId = document.getElementById('collectionSelect').value;
-        const formData = new FormData();
-        
-        // Add files
-        this.selectedFiles.forEach(file => {
-            formData.append('files', file);
-        });
-        
-        if (collectionId) {
-            formData.append('collection_id', collectionId);
-        }
+        const collectionId = collectionSelect.value || null;
         
         try {
-            // Show loading state
-            const uploadBtn = document.getElementById('uploadBtn');
-            const originalText = uploadBtn.textContent;
-            uploadBtn.textContent = 'Uploading...';
-            uploadBtn.disabled = true;
+            this.showLoading();
+            let successCount = 0;
             
-            const response = await fetch('/api/photos', {
-                method: 'POST',
-                body: formData
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                this.showNotification(`Successfully uploaded ${data.photos.length} photo${data.photos.length > 1 ? 's' : ''}!`, 'success');
-                
-                // Reset form
-                document.getElementById('fileInput').value = '';
-                document.getElementById('collectionSelect').value = '';
-                document.querySelector('.upload-text').textContent = 'Drag and drop photos here';
-                this.selectedFiles = [];
-                
-                // Reload data
-                this.loadPhotos();
-                this.loadCollections();
-            } else {
-                this.showNotification(data.error || 'Upload failed', 'error');
-                if (data.details) {
-                    console.error('Upload details:', data.details);
+            for (const file of files) {
+                const formData = new FormData();
+                formData.append('photo', file);
+                if (collectionId) {
+                    formData.append('collection_id', collectionId);
                 }
+                
+                const response = await fetch('/api/photos/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    successCount++;
+                }
+            }
+            
+            if (successCount > 0) {
+                this.showNotification(`${successCount} photos uploaded successfully!`, 'success');
+                fileInput.value = '';
+                await this.loadCollections();
+                
+                // If we're in a collection view, reload it
+                if (this.currentView === 'collection' && this.currentCollectionId) {
+                    await this.viewCollection(this.currentCollectionId);
+                }
+            } else {
+                this.showNotification('Failed to upload photos', 'error');
             }
         } catch (error) {
             console.error('Upload error:', error);
-            this.showNotification('Upload failed. Please try again.', 'error');
+            this.showNotification('Failed to upload photos', 'error');
         } finally {
-            // Reset button
-            const uploadBtn = document.getElementById('uploadBtn');
-            uploadBtn.textContent = 'Upload Photos';
-            uploadBtn.disabled = false;
+            this.hideLoading();
+        }
+    }
+    
+    // Navigation
+    showGallery() {
+        // Hide collection view
+        document.getElementById('collectionSection').classList.add('hidden');
+        
+        // Show gallery view
+        document.getElementById('gallerySection').classList.remove('hidden');
+        
+        // Update navigation
+        document.getElementById('galleryBtn').classList.add('active');
+        document.getElementById('adminBtn').classList.remove('active');
+        
+        // Hide admin panel
+        document.getElementById('adminPanel').classList.add('hidden');
+        
+        this.currentView = 'gallery';
+        this.currentCollectionId = null;
+        this.selectedPhotos.clear();
+    }
+    
+    toggleAdmin() {
+        const adminPanel = document.getElementById('adminPanel');
+        const galleryBtn = document.getElementById('galleryBtn');
+        const adminBtn = document.getElementById('adminBtn');
+        
+        if (adminPanel.classList.contains('hidden')) {
+            // Show admin panel
+            adminPanel.classList.remove('hidden');
+            adminBtn.classList.add('active');
+            galleryBtn.classList.remove('active');
+            
+            // Hide collection view if showing
+            document.getElementById('collectionSection').classList.add('hidden');
+            document.getElementById('gallerySection').classList.remove('hidden');
+            
+            this.currentView = 'admin';
+        } else {
+            // Hide admin panel
+            adminPanel.classList.add('hidden');
+            adminBtn.classList.remove('active');
+            galleryBtn.classList.add('active');
+            
+            this.currentView = 'gallery';
         }
     }
     
     // Utility Functions
+    updateCollectionOptions() {
+        const selects = [
+            document.getElementById('collectionSelect'),
+            document.getElementById('moveToCollectionSelect')
+        ];
+        
+        selects.forEach(select => {
+            if (!select) return;
+            
+            const isUploadSelect = select.id === 'collectionSelect';
+            select.innerHTML = isUploadSelect ? 
+                '<option value="">Select Collection</option>' : 
+                '<option value="">Move to Collection...</option>';
+            
+            this.collections.forEach(collection => {
+                const option = document.createElement('option');
+                option.value = collection.id;
+                option.textContent = collection.name;
+                select.appendChild(option);
+            });
+        });
+    }
+    
+    setupEventListeners() {
+        // File input
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        
+        if (fileInput && uploadArea) {
+            uploadArea.addEventListener('click', () => fileInput.click());
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                fileInput.files = e.dataTransfer.files;
+            });
+        }
+        
+        // Modal close
+        const modal = document.getElementById('photoModal');
+        const modalClose = document.querySelector('.modal-close');
+        
+        if (modalClose) {
+            modalClose.addEventListener('click', () => this.closeModal());
+        }
+        
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) this.closeModal();
+            });
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeModal();
+            }
+        });
+        
+        // Enter key for login
+        const passwordInput = document.getElementById('adminPassword');
+        if (passwordInput) {
+            passwordInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.login();
+                }
+            });
+        }
+        
+        // Enter key for collection creation
+        const collectionInput = document.getElementById('collectionNameInput');
+        if (collectionInput) {
+            collectionInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.createCollection();
+                }
+            });
+        }
+    }
+    
+    showLoading() {
+        document.getElementById('loadingOverlay').classList.remove('hidden');
+    }
+    
+    hideLoading() {
+        document.getElementById('loadingOverlay').classList.add('hidden');
+    }
+    
     showNotification(message, type = 'info') {
-        // Remove existing notifications
-        const existingNotifications = document.querySelectorAll('.notification');
-        existingNotifications.forEach(notification => notification.remove());
-        
+        // Create notification element
         const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
+        notification.className = `notification notification-${type}`;
+        notification.textContent = message;
         
-        const icons = {
-            success: '✅',
-            error: '❌',
-            warning: '⚠️',
-            info: 'ℹ️'
-        };
-        
-        notification.innerHTML = `
-            <div class="notification-content">
-                <span class="notification-icon">${icons[type] || icons.info}</span>
-                <span class="notification-text">${message}</span>
-                <button class="notification-close" onclick="this.parentElement.parentElement.remove()">×</button>
-            </div>
-        `;
+        // Style the notification
+        Object.assign(notification.style, {
+            position: 'fixed',
+            top: '80px',
+            right: '20px',
+            background: type === 'success' ? 'var(--apple-green)' : 
+                       type === 'error' ? 'var(--apple-red)' : 'var(--apple-blue)',
+            color: 'white',
+            padding: '12px 20px',
+            borderRadius: '12px',
+            boxShadow: 'var(--shadow-lg)',
+            zIndex: '10001',
+            fontSize: '14px',
+            fontWeight: '500',
+            maxWidth: '300px',
+            transform: 'translateX(100%)',
+            transition: 'transform 0.3s ease'
+        });
         
         document.body.appendChild(notification);
         
-        // Show notification
-        setTimeout(() => notification.classList.add('show'), 100);
-        
-        // Auto remove after 5 seconds
+        // Animate in
         setTimeout(() => {
-            notification.classList.remove('show');
-            setTimeout(() => notification.remove(), 300);
-        }, 5000);
-    }
-    
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+            notification.style.transform = 'translateX(0)';
+        }, 10);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            notification.style.transform = 'translateX(100%)';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
     }
 }
 
@@ -918,32 +744,5 @@ let photoGallery;
 
 document.addEventListener('DOMContentLoaded', () => {
     photoGallery = new PhotoGallery();
-    
-    // Set up modal close functionality
-    const photoModal = document.getElementById('photoModal');
-    const photoModalClose = document.querySelector('#photoModal .modal-close');
-    
-    // Close photo modal when clicking the X button
-    if (photoModalClose) {
-        photoModalClose.addEventListener('click', () => {
-            photoGallery.closeModal();
-        });
-    }
-    
-    // Close modal when clicking outside the modal content
-    if (photoModal) {
-        photoModal.addEventListener('click', (e) => {
-            if (e.target === photoModal) {
-                photoGallery.closeModal();
-            }
-        });
-    }
-    
-    // Close modal with Escape key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            photoGallery.closeModal();
-        }
-    });
 });
 

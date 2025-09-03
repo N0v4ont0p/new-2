@@ -1,36 +1,29 @@
-from flask import Blueprint, request, jsonify
-from werkzeug.utils import secure_filename
+from flask import Blueprint, request, jsonify, current_app
 import cloudinary
 import cloudinary.uploader
+import cloudinary.api
+from werkzeug.utils import secure_filename
 import os
-from src.models.photo import db, Photo, CloudinaryCollectionManager
-from src.routes.auth import require_admin_auth
 from PIL import Image
 import io
 import tempfile
+from ..models.photo import Photo
 
 photos_bp = Blueprint('photos', __name__)
 
-# Supported file extensions including HEIC
-ALLOWED_EXTENSIONS = {
-    'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff', 'tif',
-    'heic', 'heif', 'avif'
-}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff', 'heic', 'heif', 'avif', 'svg'}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 def allowed_file(filename):
-    """Check if file extension is allowed"""
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def convert_heic_to_jpg(file_content):
-    """Convert HEIC file to JPG format"""
+    """Convert HEIC/HEIF files to JPG format"""
     try:
         from pillow_heif import register_heif_opener
-        
-        # Register HEIF opener with PIL
         register_heif_opener()
         
-        # Open HEIC image
+        # Open HEIC file
         image = Image.open(io.BytesIO(file_content))
         
         # Convert to RGB if necessary
@@ -43,365 +36,234 @@ def convert_heic_to_jpg(file_content):
         output.seek(0)
         
         return output.getvalue(), 'jpg'
-        
-    except ImportError:
-        # Fallback: Upload HEIC directly to Cloudinary (it can handle conversion)
-        return file_content, 'heic'
     except Exception as e:
-        print(f"Error converting HEIC: {str(e)}")
-        # Fallback: Upload HEIC directly to Cloudinary
-        return file_content, 'heic'
+        current_app.logger.error(f"HEIC conversion error: {e}")
+        return None, None
 
-@photos_bp.route('/photos', methods=['GET'])
+@photos_bp.route('/api/photos', methods=['GET'])
 def get_photos():
-    """Get all photos or photos from a specific collection"""
     try:
         collection_id = request.args.get('collection_id')
         
         if collection_id:
             # Get photos from specific collection
-            photos = CloudinaryCollectionManager.get_collection_photos(collection_id)
+            photos = Photo.get_by_collection(collection_id)
         else:
             # Get all photos
-            photos = Photo.query.order_by(Photo.uploaded_at.desc()).all()
-            photos = [photo.to_dict() for photo in photos]
+            photos = Photo.get_all()
+        
+        photos_data = []
+        for photo in photos:
+            photos_data.append({
+                'id': photo.id,
+                'filename': photo.filename,
+                'cloudinary_public_id': photo.cloudinary_public_id,
+                'cloudinary_secure_url': photo.cloudinary_secure_url,
+                'cloudinary_folder': photo.cloudinary_folder,
+                'created_at': photo.created_at.isoformat() if photo.created_at else None
+            })
         
         return jsonify({
             'success': True,
-            'photos': photos
+            'photos': photos_data
         })
-        
+    
     except Exception as e:
-        print(f"Error getting photos: {str(e)}")
+        current_app.logger.error(f"Error getting photos: {e}")
         return jsonify({
             'success': False,
-            'error': 'Failed to fetch photos'
+            'message': 'Failed to get photos'
         }), 500
 
-@photos_bp.route('/photos', methods=['POST'])
-@require_admin_auth
-def upload_photos():
-    """Upload photos with HEIC support and permanent Cloudinary storage"""
+@photos_bp.route('/api/photos/upload', methods=['POST'])
+def upload_photo():
     try:
-        # Check if files are present
-        if 'files' not in request.files:
+        if 'photo' not in request.files:
             return jsonify({
                 'success': False,
-                'error': 'No files provided'
+                'message': 'No photo file provided'
             }), 400
         
-        files = request.files.getlist('files')
-        if not files or all(file.filename == '' for file in files):
-            return jsonify({
-                'success': False,
-                'error': 'No files selected'
-            }), 400
-        
-        # Get collection ID
+        file = request.files['photo']
         collection_id = request.form.get('collection_id')
         
-        # Validate collection if provided
-        if collection_id:
-            collection = CloudinaryCollectionManager.get_collection_by_id(collection_id)
-            if not collection:
-                return jsonify({
-                    'success': False,
-                    'error': 'Invalid collection selected'
-                }), 400
-        
-        uploaded_photos = []
-        errors = []
-        
-        for i, file in enumerate(files):
-            try:
-                if not file or file.filename == '':
-                    continue
-                
-                # Check file extension
-                if not allowed_file(file.filename):
-                    errors.append(f"File {file.filename}: Unsupported file type")
-                    continue
-                
-                # Read file content
-                file_content = file.read()
-                if len(file_content) == 0:
-                    errors.append(f"File {file.filename}: Empty file")
-                    continue
-                
-                # Check file size (max 10MB)
-                if len(file_content) > 10 * 1024 * 1024:
-                    errors.append(f"File {file.filename}: File too large (max 10MB)")
-                    continue
-                
-                # Get original filename and extension
-                original_filename = secure_filename(file.filename)
-                file_extension = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
-                
-                # Handle HEIC files
-                if file_extension in ['heic', 'heif']:
-                    try:
-                        file_content, file_extension = convert_heic_to_jpg(file_content)
-                        print(f"Converted HEIC file {original_filename} to {file_extension}")
-                    except Exception as e:
-                        print(f"HEIC conversion warning for {original_filename}: {str(e)}")
-                        # Continue with original file - Cloudinary can handle HEIC
-                
-                # Prepare upload parameters
-                upload_params = {
-                    'resource_type': 'image',
-                    'quality': 'auto:good',
-                    'fetch_format': 'auto',
-                    'overwrite': False
-                }
-                
-                # Add to collection folder if specified
-                if collection_id:
-                    upload_params['folder'] = collection_id
-                    upload_params['public_id'] = f"{collection_id}/{original_filename.rsplit('.', 1)[0]}_{i}"
-                else:
-                    upload_params['folder'] = 'uncategorized'
-                    upload_params['public_id'] = f"uncategorized/{original_filename.rsplit('.', 1)[0]}_{i}"
-                
-                # Upload to Cloudinary
-                with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                    temp_file.write(file_content)
-                    temp_file.flush()
-                    
-                    result = cloudinary.uploader.upload(
-                        temp_file.name,
-                        **upload_params
-                    )
-                    
-                    # Clean up temp file
-                    os.unlink(temp_file.name)
-                
-                # Get title
-                title = original_filename.rsplit('.', 1)[0] if original_filename else f"Photo {i+1}"
-                
-                # Save to database
-                photo = Photo(
-                    title=title,
-                    description='',
-                    cloudinary_public_id=result['public_id'],
-                    cloudinary_url=result['url'],
-                    cloudinary_secure_url=result['secure_url'],
-                    cloudinary_folder=collection_id if collection_id else 'uncategorized',
-                    original_filename=original_filename,
-                    file_format=result.get('format', file_extension),
-                    file_size=result.get('bytes', len(file_content)),
-                    width=result.get('width'),
-                    height=result.get('height')
-                )
-                
-                db.session.add(photo)
-                uploaded_photos.append(photo.to_dict())
-                
-            except Exception as e:
-                error_msg = f"File {file.filename}: {str(e)}"
-                print(f"Upload error: {error_msg}")
-                errors.append(error_msg)
-                continue
-        
-        # Commit all successful uploads
-        if uploaded_photos:
-            try:
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                return jsonify({
-                    'success': False,
-                    'error': f'Database error: {str(e)}'
-                }), 500
-        
-        # Return results
-        if uploaded_photos:
-            response = {
-                'success': True,
-                'message': f'Successfully uploaded {len(uploaded_photos)} photo(s)',
-                'photos': uploaded_photos
-            }
-            if errors:
-                response['warnings'] = errors
-            return jsonify(response), 201
-        else:
+        if file.filename == '':
             return jsonify({
                 'success': False,
-                'error': 'No photos were uploaded successfully',
-                'details': errors
+                'message': 'No file selected'
             }), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({
+                'success': False,
+                'message': 'File type not allowed'
+            }), 400
+        
+        # Check file size
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+        
+        if file_size > MAX_FILE_SIZE:
+            return jsonify({
+                'success': False,
+                'message': 'File too large (max 10MB)'
+            }), 400
+        
+        # Read file content
+        file_content = file.read()
+        filename = secure_filename(file.filename)
+        file_extension = filename.rsplit('.', 1)[1].lower()
+        
+        # Handle HEIC/HEIF conversion
+        if file_extension in ['heic', 'heif']:
+            converted_content, new_extension = convert_heic_to_jpg(file_content)
+            if converted_content:
+                file_content = converted_content
+                file_extension = new_extension
+                filename = filename.rsplit('.', 1)[0] + '.jpg'
+        
+        # Create temporary file for upload
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_extension}') as temp_file:
+            temp_file.write(file_content)
+            temp_file_path = temp_file.name
+        
+        try:
+            # Upload to Cloudinary
+            upload_options = {
+                'resource_type': 'image',
+                'quality': 'auto:good',
+                'fetch_format': 'auto'
+            }
             
+            if collection_id:
+                upload_options['folder'] = collection_id
+            
+            result = cloudinary.uploader.upload(temp_file_path, **upload_options)
+            
+            # Save to database
+            photo = Photo.create(
+                filename=filename,
+                cloudinary_public_id=result['public_id'],
+                cloudinary_secure_url=result['secure_url'],
+                cloudinary_folder=collection_id
+            )
+            
+            return jsonify({
+                'success': True,
+                'message': 'Photo uploaded successfully',
+                'photo': {
+                    'id': photo.id,
+                    'filename': photo.filename,
+                    'cloudinary_secure_url': photo.cloudinary_secure_url,
+                    'cloudinary_folder': photo.cloudinary_folder
+                }
+            })
+        
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+    
     except Exception as e:
-        db.session.rollback()
-        print(f"Upload error: {str(e)}")
+        current_app.logger.error(f"Upload error: {e}")
         return jsonify({
             'success': False,
-            'error': f'Upload failed: {str(e)}'
+            'message': 'Failed to upload photo'
         }), 500
 
-@photos_bp.route('/photos/<int:photo_id>', methods=['DELETE'])
-@require_admin_auth
-def delete_photo(photo_id):
-    """Delete a photo from both Cloudinary and database"""
+@photos_bp.route('/api/photos/<int:photo_id>/move', methods=['PUT'])
+def move_photo(photo_id):
     try:
-        photo = Photo.query.get(photo_id)
+        data = request.get_json()
+        new_collection_id = data.get('collection_id')
+        
+        photo = Photo.get_by_id(photo_id)
         if not photo:
             return jsonify({
                 'success': False,
-                'error': 'Photo not found'
+                'message': 'Photo not found'
+            }), 404
+        
+        # Update Cloudinary folder
+        old_public_id = photo.cloudinary_public_id
+        new_public_id = f"{new_collection_id}/{old_public_id.split('/')[-1]}" if new_collection_id else old_public_id.split('/')[-1]
+        
+        # Rename in Cloudinary
+        result = cloudinary.uploader.rename(old_public_id, new_public_id)
+        
+        # Update database
+        Photo.update_collection(photo_id, new_collection_id, result['public_id'], result['secure_url'])
+        
+        return jsonify({
+            'success': True,
+            'message': 'Photo moved successfully'
+        })
+    
+    except Exception as e:
+        current_app.logger.error(f"Error moving photo: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to move photo'
+        }), 500
+
+@photos_bp.route('/api/photos/<int:photo_id>/remove', methods=['PUT'])
+def remove_photo_from_collection(photo_id):
+    try:
+        photo = Photo.get_by_id(photo_id)
+        if not photo:
+            return jsonify({
+                'success': False,
+                'message': 'Photo not found'
+            }), 404
+        
+        # Remove from Cloudinary folder (move to root)
+        old_public_id = photo.cloudinary_public_id
+        new_public_id = old_public_id.split('/')[-1]  # Remove folder prefix
+        
+        # Rename in Cloudinary
+        result = cloudinary.uploader.rename(old_public_id, new_public_id)
+        
+        # Update database - remove collection association
+        Photo.update_collection(photo_id, None, result['public_id'], result['secure_url'])
+        
+        return jsonify({
+            'success': True,
+            'message': 'Photo removed from collection'
+        })
+    
+    except Exception as e:
+        current_app.logger.error(f"Error removing photo from collection: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to remove photo from collection'
+        }), 500
+
+@photos_bp.route('/api/photos/<int:photo_id>', methods=['DELETE'])
+def delete_photo(photo_id):
+    try:
+        photo = Photo.get_by_id(photo_id)
+        if not photo:
+            return jsonify({
+                'success': False,
+                'message': 'Photo not found'
             }), 404
         
         # Delete from Cloudinary
-        try:
-            cloudinary.uploader.destroy(photo.cloudinary_public_id)
-        except Exception as e:
-            print(f"Error deleting from Cloudinary: {str(e)}")
-            # Continue with database deletion even if Cloudinary deletion fails
+        cloudinary.uploader.destroy(photo.cloudinary_public_id)
         
         # Delete from database
-        db.session.delete(photo)
-        db.session.commit()
+        Photo.delete(photo_id)
         
         return jsonify({
             'success': True,
             'message': 'Photo deleted successfully'
         })
-        
+    
     except Exception as e:
-        db.session.rollback()
-        print(f"Error deleting photo: {str(e)}")
+        current_app.logger.error(f"Error deleting photo: {e}")
         return jsonify({
             'success': False,
-            'error': 'Failed to delete photo'
-        }), 500
-
-@photos_bp.route('/photos/<int:photo_id>/move', methods=['POST'])
-@require_admin_auth
-def move_photo_to_collection(photo_id):
-    """Move a photo to a different collection"""
-    try:
-        photo = Photo.query.get(photo_id)
-        if not photo:
-            return jsonify({
-                'success': False,
-                'error': 'Photo not found'
-            }), 404
-        
-        data = request.get_json()
-        new_collection_id = data.get('collection_id')
-        
-        if not new_collection_id:
-            return jsonify({
-                'success': False,
-                'error': 'Collection ID is required'
-            }), 400
-        
-        # Validate collection exists
-        collection = CloudinaryCollectionManager.get_collection_by_id(new_collection_id)
-        if not collection:
-            return jsonify({
-                'success': False,
-                'error': 'Collection not found'
-            }), 404
-        
-        # Update Cloudinary public_id (move to new folder)
-        old_public_id = photo.cloudinary_public_id
-        filename = old_public_id.split('/')[-1] if '/' in old_public_id else old_public_id
-        new_public_id = f"{new_collection_id}/{filename}"
-        
-        try:
-            # Copy to new location
-            result = cloudinary.uploader.upload(
-                photo.cloudinary_secure_url,
-                public_id=new_public_id,
-                folder=new_collection_id,
-                resource_type='image'
-            )
-            
-            # Delete old location
-            cloudinary.uploader.destroy(old_public_id)
-            
-            # Update database
-            photo.cloudinary_public_id = result['public_id']
-            photo.cloudinary_url = result['url']
-            photo.cloudinary_secure_url = result['secure_url']
-            photo.cloudinary_folder = new_collection_id
-            
-            db.session.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': 'Photo moved successfully'
-            })
-            
-        except Exception as e:
-            print(f"Error moving photo in Cloudinary: {str(e)}")
-            return jsonify({
-                'success': False,
-                'error': 'Failed to move photo in cloud storage'
-            }), 500
-        
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error moving photo: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to move photo'
-        }), 500
-
-@photos_bp.route('/photos/<int:photo_id>/uncategorize', methods=['POST'])
-@require_admin_auth
-def uncategorize_photo(photo_id):
-    """Move a photo to uncategorized"""
-    try:
-        photo = Photo.query.get(photo_id)
-        if not photo:
-            return jsonify({
-                'success': False,
-                'error': 'Photo not found'
-            }), 404
-        
-        # Update Cloudinary public_id (move to uncategorized folder)
-        old_public_id = photo.cloudinary_public_id
-        filename = old_public_id.split('/')[-1] if '/' in old_public_id else old_public_id
-        new_public_id = f"uncategorized/{filename}"
-        
-        try:
-            # Copy to uncategorized location
-            result = cloudinary.uploader.upload(
-                photo.cloudinary_secure_url,
-                public_id=new_public_id,
-                folder='uncategorized',
-                resource_type='image'
-            )
-            
-            # Delete old location
-            cloudinary.uploader.destroy(old_public_id)
-            
-            # Update database
-            photo.cloudinary_public_id = result['public_id']
-            photo.cloudinary_url = result['url']
-            photo.cloudinary_secure_url = result['secure_url']
-            photo.cloudinary_folder = 'uncategorized'
-            
-            db.session.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': 'Photo uncategorized successfully'
-            })
-            
-        except Exception as e:
-            print(f"Error uncategorizing photo in Cloudinary: {str(e)}")
-            return jsonify({
-                'success': False,
-                'error': 'Failed to uncategorize photo in cloud storage'
-            }), 500
-        
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error uncategorizing photo: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to uncategorize photo'
+            'message': 'Failed to delete photo'
         }), 500
 

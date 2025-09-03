@@ -1,239 +1,247 @@
-from flask_sqlalchemy import SQLAlchemy
+import sqlite3
+import os
 from datetime import datetime
 import cloudinary
 import cloudinary.api
-import cloudinary.uploader
-import os
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-
-# Configure Cloudinary
-cloudinary.config(
-    cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME'),
-    api_key=os.getenv('CLOUDINARY_API_KEY'),
-    api_secret=os.getenv('CLOUDINARY_API_SECRET')
-)
-
-db = SQLAlchemy()
-
-class Photo(db.Model):
-    __tablename__ = 'photos'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(255), nullable=False)
-    description = db.Column(db.Text)
-    cloudinary_public_id = db.Column(db.String(255), nullable=False, unique=True)
-    cloudinary_url = db.Column(db.String(500), nullable=False)
-    cloudinary_secure_url = db.Column(db.String(500), nullable=False)
-    cloudinary_folder = db.Column(db.String(255))  # Collection folder name
-    original_filename = db.Column(db.String(255))
-    file_format = db.Column(db.String(10))
-    file_size = db.Column(db.Integer)
-    width = db.Column(db.Integer)
-    height = db.Column(db.Integer)
-    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'title': self.title,
-            'description': self.description,
-            'cloudinary_public_id': self.cloudinary_public_id,
-            'cloudinary_url': self.cloudinary_url,
-            'cloudinary_secure_url': self.cloudinary_secure_url,
-            'cloudinary_folder': self.cloudinary_folder,
-            'original_filename': self.original_filename,
-            'file_format': self.file_format,
-            'file_size': self.file_size,
-            'width': self.width,
-            'height': self.height,
-            'uploaded_at': self.uploaded_at.isoformat() if self.uploaded_at else None
-        }
-
-class CloudinaryCollectionManager:
-    """Manages collections using Cloudinary folders"""
+class Photo:
+    def __init__(self, id=None, filename=None, cloudinary_public_id=None, 
+                 cloudinary_secure_url=None, cloudinary_folder=None, created_at=None):
+        self.id = id
+        self.filename = filename
+        self.cloudinary_public_id = cloudinary_public_id
+        self.cloudinary_secure_url = cloudinary_secure_url
+        self.cloudinary_folder = cloudinary_folder
+        self.created_at = created_at
     
     @staticmethod
-    def sync_photos_from_cloudinary():
-        """Sync all photos from Cloudinary to database on startup"""
+    def get_db_path():
+        database_dir = os.getenv('DATABASE_DIR', '/tmp')
+        return os.path.join(database_dir, 'app.db')
+    
+    @staticmethod
+    def init_db():
+        db_path = Photo.get_db_path()
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS photos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT NOT NULL,
+                cloudinary_public_id TEXT UNIQUE NOT NULL,
+                cloudinary_secure_url TEXT NOT NULL,
+                cloudinary_folder TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        
+        # Sync with Cloudinary on startup
+        Photo.sync_from_cloudinary()
+    
+    @staticmethod
+    def sync_from_cloudinary():
+        """Sync photos from Cloudinary to local database"""
         try:
-            print("Syncing photos from Cloudinary...")
-            
             # Get all resources from Cloudinary
-            result = cloudinary.api.resources(
-                type='upload',
-                max_results=500,  # Adjust as needed
-                resource_type='image'
-            )
+            resources = []
+            next_cursor = None
             
-            synced_count = 0
+            while True:
+                result = cloudinary.api.resources(
+                    resource_type='image',
+                    type='upload',
+                    max_results=500,
+                    next_cursor=next_cursor
+                )
+                
+                resources.extend(result.get('resources', []))
+                next_cursor = result.get('next_cursor')
+                
+                if not next_cursor:
+                    break
             
-            for resource in result.get('resources', []):
+            # Update database with Cloudinary resources
+            conn = sqlite3.connect(Photo.get_db_path())
+            cursor = conn.cursor()
+            
+            for resource in resources:
                 public_id = resource['public_id']
+                secure_url = resource['secure_url']
+                folder = resource.get('folder')
+                filename = public_id.split('/')[-1]
+                created_at = resource.get('created_at')
                 
-                # Skip placeholder files
-                if '.placeholder' in public_id:
-                    continue
-                
-                # Check if photo already exists in database
-                existing_photo = Photo.query.filter_by(cloudinary_public_id=public_id).first()
-                
-                if not existing_photo:
-                    # Extract folder name (collection) from public_id
-                    folder_name = None
-                    if '/' in public_id:
-                        folder_name = public_id.split('/')[0]
-                        # Don't change folder assignment - keep it as is in Cloudinary
-                    
-                    # Create title from public_id
-                    title = public_id.split('/')[-1] if '/' in public_id else public_id
-                    title = title.replace('_', ' ').title()
-                    
-                    # Create new photo record with EXACT folder from Cloudinary
-                    photo = Photo(
-                        title=title,
-                        description='',
-                        cloudinary_public_id=public_id,
-                        cloudinary_url=resource['url'],
-                        cloudinary_secure_url=resource['secure_url'],
-                        cloudinary_folder=folder_name,  # Keep exact folder from Cloudinary
-                        original_filename=resource.get('original_filename', title),
-                        file_format=resource.get('format', 'jpg'),
-                        file_size=resource.get('bytes', 0),
-                        width=resource.get('width', 0),
-                        height=resource.get('height', 0),
-                        uploaded_at=datetime.utcnow()
-                    )
-                    
-                    db.session.add(photo)
-                    synced_count += 1
-                else:
-                    # Update existing photo's folder to match Cloudinary
-                    cloudinary_folder = None
-                    if '/' in public_id:
-                        cloudinary_folder = public_id.split('/')[0]
-                    
-                    if existing_photo.cloudinary_folder != cloudinary_folder:
-                        existing_photo.cloudinary_folder = cloudinary_folder
-                        print(f"Updated folder for {public_id}: {existing_photo.cloudinary_folder} -> {cloudinary_folder}")
+                # Insert or update photo
+                cursor.execute('''
+                    INSERT OR REPLACE INTO photos 
+                    (cloudinary_public_id, cloudinary_secure_url, cloudinary_folder, filename, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (public_id, secure_url, folder, filename, created_at))
             
-            if synced_count > 0:
-                db.session.commit()
-                print(f"Synced {synced_count} photos from Cloudinary")
+            # Remove photos that no longer exist in Cloudinary
+            existing_public_ids = [r['public_id'] for r in resources]
+            if existing_public_ids:
+                placeholders = ','.join(['?' for _ in existing_public_ids])
+                cursor.execute(f'''
+                    DELETE FROM photos 
+                    WHERE cloudinary_public_id NOT IN ({placeholders})
+                ''', existing_public_ids)
             else:
-                print("No new photos to sync")
-                
-        except Exception as e:
-            print(f"Error syncing photos from Cloudinary: {str(e)}")
-            db.session.rollback()
-    
-    @staticmethod
-    def get_all_collections():
-        """Get all collections from Cloudinary folders"""
-        try:
-            # Get all folders from Cloudinary
-            result = cloudinary.api.root_folders()
-            collections = []
+                # No photos in Cloudinary, clear database
+                cursor.execute('DELETE FROM photos')
             
-            for folder in result.get('folders', []):
-                folder_name = folder['name']
-                
-                # Skip system folders and unwanted collections
-                if folder_name.startswith('.') or folder_name in ['uncategorized', 'georges_photo_gallery']:
-                    continue
-                
-                collections.append({
-                    'id': folder_name,
-                    'name': folder_name.replace('_', ' ').title(),
-                    'created_at': datetime.utcnow().isoformat()
-                })
-            
-            return collections
+            conn.commit()
+            conn.close()
             
         except Exception as e:
-            print(f"Error getting collections: {str(e)}")
-            return []
+            print(f"Error syncing from Cloudinary: {e}")
     
     @staticmethod
-    def create_collection(name):
-        """Create a new collection (Cloudinary folder)"""
-        try:
-            # Sanitize folder name
-            folder_name = name.lower().replace(' ', '_').replace('-', '_')
-            folder_name = ''.join(c for c in folder_name if c.isalnum() or c == '_')
-            
-            if not folder_name:
-                raise ValueError("Invalid collection name")
-            
-            # Create a placeholder file in the folder to ensure it exists
-            placeholder_result = cloudinary.uploader.upload(
-                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAGA6VP0NQAAAABJRU5ErkJggg==",
-                folder=folder_name,
-                public_id=f"{folder_name}/.placeholder",
-                resource_type="image"
+    def create(filename, cloudinary_public_id, cloudinary_secure_url, cloudinary_folder=None):
+        conn = sqlite3.connect(Photo.get_db_path())
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO photos (filename, cloudinary_public_id, cloudinary_secure_url, cloudinary_folder)
+            VALUES (?, ?, ?, ?)
+        ''', (filename, cloudinary_public_id, cloudinary_secure_url, cloudinary_folder))
+        
+        photo_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return Photo.get_by_id(photo_id)
+    
+    @staticmethod
+    def get_all():
+        conn = sqlite3.connect(Photo.get_db_path())
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, filename, cloudinary_public_id, cloudinary_secure_url, 
+                   cloudinary_folder, created_at
+            FROM photos
+            ORDER BY created_at DESC
+        ''')
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        photos = []
+        for row in rows:
+            photos.append(Photo(
+                id=row[0],
+                filename=row[1],
+                cloudinary_public_id=row[2],
+                cloudinary_secure_url=row[3],
+                cloudinary_folder=row[4],
+                created_at=datetime.fromisoformat(row[5]) if row[5] else None
+            ))
+        
+        return photos
+    
+    @staticmethod
+    def get_by_collection(collection_id):
+        conn = sqlite3.connect(Photo.get_db_path())
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, filename, cloudinary_public_id, cloudinary_secure_url, 
+                   cloudinary_folder, created_at
+            FROM photos
+            WHERE cloudinary_folder = ?
+            ORDER BY created_at DESC
+        ''', (collection_id,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        photos = []
+        for row in rows:
+            photos.append(Photo(
+                id=row[0],
+                filename=row[1],
+                cloudinary_public_id=row[2],
+                cloudinary_secure_url=row[3],
+                cloudinary_folder=row[4],
+                created_at=datetime.fromisoformat(row[5]) if row[5] else None
+            ))
+        
+        return photos
+    
+    @staticmethod
+    def get_by_id(photo_id):
+        conn = sqlite3.connect(Photo.get_db_path())
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, filename, cloudinary_public_id, cloudinary_secure_url, 
+                   cloudinary_folder, created_at
+            FROM photos
+            WHERE id = ?
+        ''', (photo_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return Photo(
+                id=row[0],
+                filename=row[1],
+                cloudinary_public_id=row[2],
+                cloudinary_secure_url=row[3],
+                cloudinary_folder=row[4],
+                created_at=datetime.fromisoformat(row[5]) if row[5] else None
             )
-            
-            return {
-                'id': folder_name,
-                'name': name,
-                'photo_count': 0,
-                'created_at': datetime.utcnow().isoformat()
-            }
-            
-        except Exception as e:
-            print(f"Error creating collection: {str(e)}")
-            raise e
+        
+        return None
     
     @staticmethod
-    def delete_collection(collection_id):
-        """Delete a collection and all its photos"""
-        try:
-            # Delete all resources in the folder
-            cloudinary.api.delete_resources_by_prefix(f"{collection_id}/")
-            
-            # Delete the folder itself
-            try:
-                cloudinary.api.delete_folder(collection_id)
-            except:
-                pass  # Folder might already be deleted
-            
-            # Delete photos from database
-            photos = Photo.query.filter_by(cloudinary_folder=collection_id).all()
-            for photo in photos:
-                db.session.delete(photo)
-            
-            db.session.commit()
-            return True
-            
-        except Exception as e:
-            print(f"Error deleting collection: {str(e)}")
-            db.session.rollback()
-            raise e
+    def update_collection(photo_id, collection_id, new_public_id, new_secure_url):
+        conn = sqlite3.connect(Photo.get_db_path())
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE photos 
+            SET cloudinary_folder = ?, cloudinary_public_id = ?, cloudinary_secure_url = ?
+            WHERE id = ?
+        ''', (collection_id, new_public_id, new_secure_url, photo_id))
+        
+        conn.commit()
+        conn.close()
     
     @staticmethod
-    def get_collection_photos(collection_id):
-        """Get all photos in a collection"""
-        try:
-            photos = Photo.query.filter_by(cloudinary_folder=collection_id).order_by(Photo.uploaded_at.desc()).all()
-            return [photo.to_dict() for photo in photos]
-            
-        except Exception as e:
-            print(f"Error getting collection photos: {str(e)}")
-            return []
+    def delete(photo_id):
+        conn = sqlite3.connect(Photo.get_db_path())
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM photos WHERE id = ?', (photo_id,))
+        
+        conn.commit()
+        conn.close()
     
     @staticmethod
-    def get_collection_by_id(collection_id):
-        """Get collection info by ID"""
-        try:
-            collections = CloudinaryCollectionManager.get_all_collections()
-            for collection in collections:
-                if collection['id'] == collection_id:
-                    return collection
-            return None
-            
-        except Exception as e:
-            print(f"Error getting collection: {str(e)}")
-            return None
+    def get_collection_preview(collection_id):
+        """Get the first photo from a collection for preview"""
+        conn = sqlite3.connect(Photo.get_db_path())
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT cloudinary_secure_url
+            FROM photos
+            WHERE cloudinary_folder = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        ''', (collection_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        return row[0] if row else None
 
