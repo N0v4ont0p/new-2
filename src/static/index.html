@@ -14,44 +14,41 @@
                 <span class="nav-logo">📸</span>
                 <span class="nav-title">Gallery</span>
             </div>
-            <div class="nav-actions">
-                <button id="galleryBtn" class="nav-btn active">Gallery</button>
-                <a href="/admin" class="nav-btn">Admin</a>
-            </div>
         </div>
     </nav>
 
-    <!-- Main Content -->
-    <main class="main-content">
-        <div class="container">
-            <!-- Gallery View -->
-            <section id="gallerySection" class="section">
-                <div class="hero-section">
-                    <h1 class="hero-title">Photo Gallery</h1>
-                    <p class="hero-subtitle">Beautiful moments captured and organized</p>
-                </div>
-                
-                <!-- Collections Grid -->
-                <div id="collectionsContainer" class="collections-container">
-                    <div class="section-header">
-                        <h2 class="section-title">Collections</h2>
-                    </div>
-                    <div id="collectionsGrid" class="collections-grid"></div>
-                </div>
-            </section>
+    <!-- Main Gallery Section -->
+    <div id="gallerySection" class="main-section">
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="hero-content">
+                <h1 class="hero-title">Photo Gallery</h1>
+                <p class="hero-subtitle">Beautiful moments captured and organized</p>
+            </div>
+        </section>
 
-            <!-- Collection View -->
-            <section id="collectionSection" class="section hidden">
-                <div class="collection-header">
-                    <button class="back-btn" onclick="gallery.showGallery()">
-                        <span>←</span> Back to Gallery
-                    </button>
-                    <h2 id="collectionTitle" class="collection-title"></h2>
-                </div>
-                <div id="photosGrid" class="photos-grid"></div>
-            </section>
+        <!-- Collections Section -->
+        <section class="collections-section">
+            <div class="container">
+                <h2 class="section-title">Collections</h2>
+                <div id="collectionsGrid" class="collections-grid"></div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Collection View Section -->
+    <div id="collectionSection" class="main-section hidden">
+        <div class="container">
+            <!-- Collection Header -->
+            <div class="collection-header">
+                <button id="backBtn" class="back-btn">← Back to Gallery</button>
+                <h1 id="collectionTitle" class="collection-title"></h1>
+            </div>
+
+            <!-- Photos Grid -->
+            <div id="photosGrid" class="photos-grid"></div>
         </div>
-    </main>
+    </div>
 
     <!-- Photo Modal -->
     <div id="photoModal" class="modal hidden">
