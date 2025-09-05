@@ -1,9 +1,22 @@
 services:
   - type: web
-    name: photo-gallery-file-based
+    name: photo-gallery
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python src/main.py
+    startCommand: cd src && gunicorn --bind 0.0.0.0:$PORT main:app
     plan: free
     autoDeploy: false
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: ADMIN_PASSWORD
+        value: Hanshow99@
+      - key: SECRET_KEY
+        generateValue: true
 

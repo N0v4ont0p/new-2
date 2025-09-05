@@ -4,11 +4,13 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import mimetypes
-from flask import Flask, jsonify, send_file, send_from_directory
+import shutil
+from flask import Flask, jsonify, send_file, send_from_directory, request
 from flask_cors import CORS
 from PIL import Image
 import pillow_heif
 from io import BytesIO
+from werkzeug.utils import secure_filename
 
 # Register HEIF opener with Pillow
 pillow_heif.register_heif_opener()
@@ -172,6 +174,181 @@ def api_photo_download(collection_name, filename):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# Admin API Routes
+@app.route('/api/admin/login', methods=['POST'])
+def admin_login():
+    """Admin login endpoint"""
+    try:
+        data = request.get_json()
+        password = data.get('password', '')
+        
+        # Check password (in production, use proper hashing)
+        if password == 'Hanshow99@':
+            return jsonify({
+                'success': True,
+                'message': 'Login successful'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid password'
+            }), 401
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+@app.route('/api/admin/collections', methods=['POST'])
+def create_collection():
+    """Create a new collection"""
+    try:
+        data = request.get_json()
+        collection_name = data.get('name', '').strip()
+        
+        if not collection_name:
+            return jsonify({
+                'success': False,
+                'message': 'Collection name is required'
+            }), 400
+        
+        # Sanitize collection name
+        collection_name = secure_filename(collection_name)
+        collection_path = os.path.join(COLLECTIONS_DIR, collection_name)
+        
+        if os.path.exists(collection_path):
+            return jsonify({
+                'success': False,
+                'message': 'Collection already exists'
+            }), 400
+        
+        os.makedirs(collection_path)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Collection "{collection_name}" created successfully',
+            'collection_name': collection_name
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+@app.route('/api/admin/collections/<collection_name>', methods=['DELETE'])
+def delete_collection(collection_name):
+    """Delete a collection and all its photos"""
+    try:
+        collection_path = os.path.join(COLLECTIONS_DIR, collection_name)
+        
+        if not os.path.exists(collection_path):
+            return jsonify({
+                'success': False,
+                'message': 'Collection not found'
+            }), 404
+        
+        shutil.rmtree(collection_path)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Collection "{collection_name}" deleted successfully'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+@app.route('/api/admin/upload', methods=['POST'])
+def upload_photos():
+    """Upload photos to a collection"""
+    try:
+        collection_name = request.form.get('collection')
+        if not collection_name:
+            return jsonify({
+                'success': False,
+                'message': 'Collection name is required'
+            }), 400
+        
+        collection_path = os.path.join(COLLECTIONS_DIR, collection_name)
+        if not os.path.exists(collection_path):
+            return jsonify({
+                'success': False,
+                'message': 'Collection does not exist'
+            }), 404
+        
+        if 'files' not in request.files:
+            return jsonify({
+                'success': False,
+                'message': 'No files provided'
+            }), 400
+        
+        files = request.files.getlist('files')
+        uploaded_files = []
+        errors = []
+        
+        for file in files:
+            if file.filename == '':
+                continue
+                
+            if file and is_image_file(file.filename):
+                try:
+                    filename = secure_filename(file.filename)
+                    # Ensure unique filename
+                    counter = 1
+                    base_name, ext = os.path.splitext(filename)
+                    while os.path.exists(os.path.join(collection_path, filename)):
+                        filename = f"{base_name}_{counter}{ext}"
+                        counter += 1
+                    
+                    file_path = os.path.join(collection_path, filename)
+                    file.save(file_path)
+                    uploaded_files.append(filename)
+                except Exception as e:
+                    errors.append(f"Failed to upload {file.filename}: {str(e)}")
+            else:
+                errors.append(f"Invalid file type: {file.filename}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Uploaded {len(uploaded_files)} file(s) successfully',
+            'uploaded_files': uploaded_files,
+            'errors': errors
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+@app.route('/api/admin/photos/<collection_name>/<filename>', methods=['DELETE'])
+def delete_photo(collection_name, filename):
+    """Delete a specific photo"""
+    try:
+        file_path = os.path.join(COLLECTIONS_DIR, collection_name, filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({
+                'success': False,
+                'message': 'Photo not found'
+            }), 404
+        
+        os.remove(file_path)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Photo "{filename}" deleted successfully'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
 
 # Frontend Routes
 @app.route('/', defaults={'path': ''})

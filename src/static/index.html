@@ -14,6 +14,10 @@
                 <span class="nav-logo">📸</span>
                 <span class="nav-title">Gallery</span>
             </div>
+            <div class="nav-actions">
+                <a href="#" id="adminLink" class="nav-link hidden">Admin</a>
+                <a href="#" id="logoutLink" class="nav-link hidden">Logout</a>
+            </div>
         </div>
     </nav>
 
@@ -50,6 +54,66 @@
         </div>
     </div>
 
+    <!-- Admin Login Section -->
+    <div id="loginSection" class="main-section hidden">
+        <div class="container">
+            <div class="login-container">
+                <h2 class="login-title">Admin Login</h2>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" id="password" class="form-input" required>
+                    </div>
+                    <button type="submit" class="btn">Login</button>
+                </form>
+                <div id="loginError" class="alert alert-error hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Section -->
+    <div id="adminSection" class="main-section admin-section hidden">
+        <!-- Admin Header -->
+        <div class="admin-header">
+            <div class="container">
+                <h1 class="admin-title">Admin Dashboard</h1>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="admin-content">
+                <!-- Admin Actions -->
+                <div class="admin-actions">
+                    <button id="createCollectionBtn" class="btn">+ Create Collection</button>
+                    <button id="backToGalleryBtn" class="btn btn-secondary">← Back to Gallery</button>
+                </div>
+
+                <!-- Upload Area -->
+                <div id="uploadArea" class="upload-area">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">Drag & Drop Photos Here</div>
+                    <div class="upload-subtext">or click to select files</div>
+                    <input type="file" id="fileInput" class="file-input" multiple accept="image/*">
+                    
+                    <div class="form-group mt-lg">
+                        <label for="collectionSelect" class="form-label">Select Collection</label>
+                        <select id="collectionSelect" class="form-select">
+                            <option value="">Choose a collection...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Upload Progress -->
+                <div id="uploadProgress" class="hidden">
+                    <div class="alert alert-success">Uploading photos...</div>
+                </div>
+
+                <!-- Admin Collections Grid -->
+                <div id="adminCollectionsGrid" class="collections-grid"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Photo Modal -->
     <div id="photoModal" class="modal hidden">
         <div class="modal-backdrop" onclick="gallery.closeModal()"></div>
@@ -58,9 +122,34 @@
             <img id="modalImage" src="" alt="">
             <div class="modal-actions">
                 <button id="downloadBtn" class="modal-btn">Download</button>
+                <button id="deleteBtn" class="modal-btn btn-danger hidden">Delete</button>
             </div>
         </div>
     </div>
+
+    <!-- Create Collection Modal -->
+    <div id="createCollectionModal" class="modal hidden">
+        <div class="modal-backdrop" onclick="gallery.closeCreateCollectionModal()"></div>
+        <div class="modal-content">
+            <button class="modal-close" onclick="gallery.closeCreateCollectionModal()">×</button>
+            <div style="padding: 24px;">
+                <h3 style="margin-bottom: 16px;">Create New Collection</h3>
+                <form id="createCollectionForm">
+                    <div class="form-group">
+                        <label for="collectionName" class="form-label">Collection Name</label>
+                        <input type="text" id="collectionName" class="form-input" required>
+                    </div>
+                    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                        <button type="button" class="btn btn-secondary" onclick="gallery.closeCreateCollectionModal()">Cancel</button>
+                        <button type="submit" class="btn">Create</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts Container -->
+    <div id="alertsContainer" style="position: fixed; top: 80px; right: 24px; z-index: 3000;"></div>
 
     <script src="/script.js"></script>
 </body>
